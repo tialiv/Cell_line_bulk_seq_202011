@@ -1,19 +1,25 @@
 channels:
 - conda-forge
 - bioconda
+- r
 dependencies:
 - snakemake-minimal
-- msigdbr
-- org.Hs.eg.db
-- DESeq2=1.28.1
-- clusterProfiler
-- biomaRt
-- pathview
-- umap
-- RColorBrewer
-- dplyr
-- DOSE
-- VennDiagram
-- ggplot2
-- BiocManager
+- r-msigdbr
+- bioconductor-org.Hs.eg.db
+- bioconductor-deseq2=1.30.1
+- bioconductor-clusterProfiler
+- bioconductor-biomaRt
+- bioconductor-pathview
+- r-umap
+- r-RColorBrewer
+- r-dplyr
+- bioconductor-DOSE
+- r-venndiagram
+- r-ggplot2
+- r-BiocManager
+- python
+- r-argparse
+- rstudio
+- r-rmarkdown
+
 
