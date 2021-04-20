@@ -3,3 +3,17 @@ channels:
 - bioconda
 dependencies:
 - snakemake-minimal
+- msigdbr
+- org.Hs.eg.db
+- DESeq2=1.28.1
+- clusterProfiler
+- biomaRt
+- pathview
+- umap
+- RColorBrewer
+- dplyr
+- DOSE
+- VennDiagram
+- ggplot2
+- BiocManager
+
