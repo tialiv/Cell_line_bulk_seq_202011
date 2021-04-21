@@ -1,5 +1,14 @@
 #####################################################2 chemicals########################################################
 
+---
+title: "Cell lines bulk RNAseq data analysis - DES and KTZ"
+author: "Tianyi"
+date: "'r format(Sys,time(), '%d %B%, %Y')'"
+output:html_document
+
+---
+
+
 setwd("/Users/tili/Desktop/Results/PCR/bulk seq_primary_KGN_COV/DESeq2/")
 
 info <- read.csv("forskolin info.csv", header = T, sep = ";")
