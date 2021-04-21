@@ -4,23 +4,23 @@ channels:
 - r
 dependencies:
 - snakemake-minimal
-- r-msigdbr
-- bioconductor-org.Hs.eg.db
+- r-msigdbr=7.2.1
+- bioconductor-org.Hs.eg.db=3.12.0
 - bioconductor-deseq2=1.30.1
-- bioconductor-clusterProfiler
-- bioconductor-biomaRt
-- bioconductor-pathview
-- r-umap
-- r-RColorBrewer
-- r-dplyr
-- bioconductor-DOSE
-- r-venndiagram
-- r-ggplot2
-- r-BiocManager
+- bioconductor-clusterProfiler=3.18.1
+- bioconductor-biomaRt=2.46.3
+- bioconductor-pathview=1.30.1
+- r-umap=0.2.7.0
+- r-RColorBrewer=1.1_2
+- r-dplyr=1.0.5
+- bioconductor-DOSE=3.16.0
+- r-venndiagram=1.6.20
+- r-ggplot2=3.3.3
+- r-BiocManager=1.30.12
 - python
 - r-argparse
-- rstudio
-- r-rmarkdown
-- r-pheatmap
+- rstudio=1.1.456
+- r-rmarkdown=2.7
+- r-pheatmap=1.0.12
 
 
