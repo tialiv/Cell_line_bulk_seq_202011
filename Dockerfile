@@ -1,45 +1,62 @@
 FROM ubuntu:16.04
 LABEL description = "Lightweight image with Conda, Jupyter Notebook and Snakemake"
 
-# Install Miniconda3 and prerequisites
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends bzip2 curl ca-certificates
-RUN curl https://repo.continuum.io/miniconda/Miniconda3-4.5.11-Linux-x86_64.sh -O && \
-    bash Miniconda3-4.5.11-Linux-x86_64.sh -bf -p /opt/miniconda3/ && \
-    rm Miniconda3-4.5.11-Linux-x86_64.sh
-
-# Add Conda to PATH
-ENV PATH="/opt/miniconda3/bin:${PATH}"
-
 # Use bash as shell
 SHELL ["/bin/bash", "-c"]
 
-# Set up the Conda environment
-COPY environment.yml .
-RUN conda env update -n root -f environment.yml && \
+# Set workdir
+WORKDIR /cellbulk
+
+# Install Miniconda3 and prerequisites
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends bzip2 \
+                                               ca-certificates \
+                                               curl \
+                                               fontconfig \
+                                               git \
+                                               language-pack-en \
+    && apt-get clean
+
+# Install Miniconda and add to PATH
+RUN curl -L https://repo.continuum.io/miniconda/Miniconda3-4.7.12.1-Linux-x86_64.sh -O && \
+    bash Miniconda3-4.7.12.1-Linux-x86_64.sh -bf -p /usr/miniconda3/ && \
+    rm Miniconda3-4.7.12.1-Linux-x86_64.sh && \
+    /usr/miniconda3/bin/conda clean -tipsy && \
+    ln -s /usr/miniconda3/etc/profile.d/conda.sh /etc/profile.d/conda.sh && \
+    echo ". /usr/miniconda3/etc/profile.d/conda.sh" >> ~/.bashrc && \
+    echo "conda activate base" >> ~/.bashrc
+
+# Add Conda to PATH and set locate
+ENV PATH="/opt/miniconda3/bin:${PATH}"
+ENV LC_ALL en_US.UTF-8
+ENV LC_LANG en_US.UTF-8
+
+# Add project files
+COPY environment.yml Snakefile config.yml ./
+COPY code ./code/
+
+# Install conda environment
+RUN conda config --add channels bioconda && \
+    conda config --add channels conda-forge && \
+    conda env update -n base -f environment.yml && \
     conda clean --all
 
-# Install Jupyter Notebook and set default user to UID 1000
-RUN pip install --no-cache-dir notebook==5.*
-ENV NB_USER nbuser
-ENV NB_UID 1000
+# Install jupyter and nb_conda
+RUN conda install -c conda-forge jupyter nb_conda && \
+    conda clean --all
 
-RUN adduser --disabled-password --no-create-home \
-    --gecos "Default user" \
-    --uid ${NB_UID} \
-    ${NB_USER}
+# Install TinyTeX
+ENV PATH="/usr/.TinyTeX/bin/x86_64-linux:${PATH}"
+RUN echo -e "library(tinytex)\ntinytex::install_tinytex(dir='/usr/.TinyTeX')"| R --vanilla - && \
+    tlmgr path add && \
+    tlmgr update --self && \
+    tlmgr install float grffile xcolor mdwtools epstopdf-pkg
 
-# Define workdir and set ownership to NB_USER
-WORKDIR /home
-ENV HOME /home
-USER root
-RUN chown -R ${NB_UID} ${HOME}
-USER ${NB_USER}
+# Open port for running Jupyter Notebook
+# (Jupyter Notebook has to be separately installed in the container)
+EXPOSE 8888
 
-# Add the workflow files and the code
-COPY Snakefile config.yml ./
-COPY code ./code/
-COPY notebooks ./notebooks/
+CMD snakemake -rp --configfile config.yml
 
 # Start Bash shell by default
 CMD /bin/bash
