@@ -22,5 +22,5 @@ dependencies:
 - rstudio=1.1.456
 - r-rmarkdown=2.7
 - r-pheatmap=1.0.12
-
-
+- r-base
+- r-digest
