@@ -1,0 +1,122 @@
+---
+title: "QC"
+author: "Tianyi"
+date: "4/22/2021"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+    number_sections: true
+params:
+    counts_matrix: "/data/subreadCounts.txt"
+    sample_info: "/data/info.csv"
+    cell_line: "COV434 KGN Primary"
+    chemical: "DES KTZ" 
+---
+
+```{r setup, include = F}
+.libPaths("/opt/miniconda3/envs/Cell_bulk_202011/lib/R/library")
+knitr::opts_chunk$set(echo = T)
+```
+
+# Cell line bulk RNAseq analysis - DES and KTZ samples
+
+QC of the analyzed samples.  
+
+## Load required library
+
+```{r Load dependencies}
+library(dplyr)
+library(DESeq2)
+library(ggplot2)
+library(pheatmap)
+library(umap)
+```
+
+## Data input
+
+```{r data input}
+cells <- read.delim(file = "/Users/tili/Desktop/try/data/DES.txt")
+info <- read.csv(file = "/Users/tili/Desktop/try/data/info.csv", header = T, sep = ";")
+cells[is.na(cells)] <- 0 
+cell_line <- unlist(strsplit(params$cell_line, " "))
+chemical <- unlist(strsplit(params$chemical, " "))
+```
+
+## Construct dds object
+
+```{r construct dds object}
+dds <- DESeqDataSetFromMatrix(countData=cells_ordered, colData = info, design = ~ group) 
+```
+
+## Plot library size / how many reads per sample
+
+```{r sequence depth check}
+d <- info
+d$read <- colSums(counts(dds)) 
+ggplot(d, aes(x=sample, y=read, fill = cell_line)) + geom_bar(stat = "identity") + theme +
+  ggtitle("Samples Sequenced Read") + xlab("")
+```
+
+## Low count genes filtering 
+
+```{r low count filtering}
+keep <- rowSums(counts(dds)) >= 1 
+dds <- dds[keep,]
+```
+
+## PCA plot using normalized data
+
+```{r low count filtering}
+r <- vst(dds, blind = T)
+theme <- theme(text=element_text(size=9),
+               axis.text.x=element_text(color="black", angle = 90),
+               axis.text.y=element_text(color="black"),
+               axis.ticks=element_blank(),
+               strip.background = element_rect(colour=NA, fill=NA),
+               plot.background = element_blank(),
+               panel.grid.major = element_blank(),
+               panel.grid.minor = element_blank(),
+               panel.border = element_blank(),
+               axis.line.x = element_line(size=0.4),
+               axis.line.y = element_line(size=0.4),
+               panel.background = element_blank(),
+               legend.position = "bottom")
+pca <- plotPCA(r, intgroup = c("cell_line","group"), returnData = T) 
+percentVar <- round(100 * attr(pca, "percentVar")) 
+ggplot(pca, aes(PC1, PC2, color = group, shape = cell_line)) + ggtitle("PCA") + theme +
+  geom_point(size = 3) + xlab(paste0("PC1: ", percentVar[1], "% variance")) + 
+  ylab(paste0("PC2: ", percentVar[2], "% variance"))
+```
+
+## UMAP using normalized data
+
+```{r low count filtering}
+set.seed(1)
+
+normalized_counts <- assay(r) %>% t()
+umap_results <- umap::umap(normalized_counts, n_neighbors = 3)
+out <- data.frame(umap_results$layout)
+
+umap_plot_df <- data.frame(umap_results$layout) %>%
+  tibble::rownames_to_column("sample") %>% 
+  dplyr::inner_join(info, by = "sample")
+
+ggplot(umap_plot_df, aes(x = X1, y = X2, color = cell_line, shape = forskolin)) + geom_point(size = 2.5) + theme +
+  ggtitle("UMAP")
+```
+
+## Heatmap: hierarchical clustering to view the similarities between technical replicates
+
+```{r low count filtering}
+r_mat <- assay(r)
+r_cor <- cor(r_mat)
+
+df <- as.data.frame(colData(dds)[,c("cell_line","group")])
+pheatmap(r_cor, annotation = df, scale = "column", show_rownames = F,
+         clustering_distance_cols = "manhattan")
+```
+
+```{r Session info}
+sessionInfo()
+```

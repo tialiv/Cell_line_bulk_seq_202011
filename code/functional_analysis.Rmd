@@ -1,0 +1,121 @@
+---
+title: "Functional analysis"
+author: "Tianyi"
+date: "4/23/2021"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+    number_sections: true
+params:
+    counts_matrix: "/data/subreadCounts.txt"
+    sample_info: "/data/info.csv"
+    cell_line: "COV434 KGN Primary"
+    chemical: "DES KTZ" 
+---
+
+```{r setup, include=FALSE}
+.libPaths("/opt/miniconda3/envs/Cell_bulk_202011/lib/R/library")
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Cell line bulk RNAseq analysis - DES and KTZ samples
+
+Functional analysis.  
+
+## Load required library
+
+```{r Load dependencies}
+library(DESeq2)
+library(dplyr)
+library(ggplot2)
+library(biomaRt)
+library(org.Hs.eg.db)
+library(DOSE)
+library(pathview)
+library(clusterProfiler)
+library(pheatmap)
+library(VennDiagram)
+library(RColorBrewer)
+library(msigdbr)
+```
+
+## Data input
+
+```{r data input}
+final <- read.csv(file = "/Users/tili/Desktop/try/results/sig_0_05_DE_genes.csv", header = T, sep = ";")
+final_shrunk <- read.csv(file = "/Users/tili/Desktop/try/results/sig_0_05_DE_genes_shrunk.csv", header = T, sep = ";")
+all <- read.csv(file = "/Users/tili/Desktop/try/results/background_genes_shrunk.csv", header = T, sep = ";")
+List <- read.csv(file = "/Users/tili/Desktop/try/results/background_genes_list_log2fc_shrunk.csv", header = T, sep = ";")
+```
+
+## GO analysis
+
+```{r GO analysis and save rds object}
+ego <- enrichGO(gene = final_shrunk$geneID, universe = all$geneID, keyType = "ENSEMBL",
+                OrgDb = org.Hs.eg.db, ont = "BP", pAdjustMethod = "BH", 
+                qvalueCutoff = 0.1, readable = TRUE)
+
+cluster_summary <- data.frame(ego)
+save(ego, file="/Users/tili/Desktop/try/results/ego.rda")
+# ego <- load(file="/Users/tili/Desktop/try/results/ego.rda")
+
+```
+
+## Plot GO analysis results
+
+```{r plot GO analysis results}
+dotplot(ego, showCategory=50) 
+emapplot(ego, showCategory = 50)
+
+foldchange <- final_shrunk$log2FoldChange
+names(foldchange) <- final_shrunk$external_gene_name
+cnetplot(ego, categorySize="pvalue", showCategory = 5, foldChange=foldchange, vertex.label.font=6)
+```
+
+## Msigdb gene set analysis
+
+```{r Msigdb gene set analysis}
+msigdbr_species()
+msigdbr_collections()
+
+msigHs_c2 <- msigdbr(species = "Homo sapiens", category = "C2") %>%
+  select(gs_name, entrez_gene) %>% 
+  as.data.frame()
+
+msigHs_h <- msigdbr(species = "Homo sapiens", category = "H") %>%
+  select(gs_name, entrez_gene) %>% 
+  as.data.frame()
+
+enrich <- enricher(gene = final_shrunk$entrezgene_id, TERM2GENE = msigHs_h,
+                   pvalueCutoff = 0.05,
+                   pAdjustMethod = "BH",
+                   minGSSize = 10,
+                   maxGSSize = 500)
+enrich <- data.frame(enrich)
+write.csv(enrich, file = "enricher with hallmark_0_05_BH_with DES6 primary gene_20210414.csv")
+
+edo <- GSEA(geneList = List, minGSSize = 10, maxGSSize = 500,
+            pvalueCutoff = 1,
+            pAdjustMethod = "BH",
+            TERM2GENE = msigHs_h)
+top10 <- data.frame(edo)
+write.csv(top10, file = "gsea with hallmark_1_BH_with DES6 primary gene_20210414.csv")
+```
+
+## Plot GSEA plot
+
+```{r GSEA plot}
+gseaplot(edo, geneSetID = 1, by = "runningScore", title = edo$Description[1])
+gseaplot(edo, geneSetID = 1, by = "preranked", title = edo$Description[1])
+enrichplot::gseaplot2(edo, geneSetID = 1, title = edo$Description[2])
+
+ggsave(filename="gsea plot with hallmark_0_05_BH_with DES6 KGN gene_20210414.jpeg", 
+       plot = last_plot(), device = NULL, path = NULL,
+       scale = 1, width = NA, height = NA, 
+       dpi = 300)
+```
+
+```{r Session info}
+sessionInfo()
+```

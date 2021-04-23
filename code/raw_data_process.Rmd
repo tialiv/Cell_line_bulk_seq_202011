@@ -1,0 +1,72 @@
+---
+title: "Raw data process in DES and KTZ samples"
+author: "Tianyi"
+date: "4/22/2021"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+    number_sections: true
+params:
+    counts_matrix: "/data/subreadCounts.txt"
+    sample_info: "/data/info.csv"
+    cell_line: "COV434 KGN Primary"
+    chemical: "DES KTZ" 
+---
+
+
+```{r setup, include = F}
+#.libPaths("/opt/miniconda3/envs/Cell_bulk_202011/lib/R/library")
+knitr::opts_chunk$set(echo = T)
+```
+
+# Cell line bulk RNAseq analysis - DES and KTZ samples
+
+Rows in the raw count matrix is renamed using geneID. Chemicals and cell lines are separated for the downstream analysis.  
+
+## Load required library
+
+```{r Load dependencies}
+library(dplyr)
+```
+
+## Raw data input
+
+```{r initial data input}
+cells <- read.delim(file = "/Users/tili/Desktop/try/data/subreadCounts.txt")
+info <- read.csv(file = "/Users/tili/Desktop/try/data/info.csv", header = T, sep = ";")
+cells[is.na(cells)] <- 0 
+cell_line <- unlist(strsplit(params$cell_line, " "))
+chemical <- unlist(strsplit(params$chemical, " "))
+```
+
+## Rename rows for count matrix
+
+```{r rename row names for count matrix}
+gene <- cells[,1] 
+rownames(cells) <- gene 
+cells <- cells[,-1] 
+```
+
+## Metadata filtering and reorder count matrix
+
+```{r metadata filtering}
+for (i in chemical) {
+  for (j in cell_line) {
+  info_chemical <- info %>% filter(chemical == i | chemical == "DMSO") 
+  info_cellline <- info_chemical %>% filter(cell_line == j)
+  write.csv(info_cellline, file = paste("/Users/tili/Desktop/try/data/processed/info_",i,"_",j,".csv", sep = ""))
+  genomic_idx <- match(info_cellline$sample, colnames(cells))
+  genomic_idx
+  cells_ordered <- cells[ ,genomic_idx]
+  all(info_cellline$name == colnames(cells_ordered)) 
+  write.csv(cells_ordered, file = paste("/Users/tili/Desktop/try/data/processed/cells_",i,"_",j,".csv", sep = ""))
+  }
+}  
+ 
+```
+
+
+```{r Session info}
+sessionInfo()
+```
