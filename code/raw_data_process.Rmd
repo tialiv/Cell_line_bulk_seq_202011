@@ -16,7 +16,7 @@ params:
 
 
 ```{r setup, include = F}
-#.libPaths("/opt/miniconda3/envs/Cell_bulk_202011/lib/R/library")
+#.libPaths("/Users/tili/miniconda3/envs/Cell_bulk_202011/lib/R/library")
 knitr::opts_chunk$set(echo = T)
 ```
 
