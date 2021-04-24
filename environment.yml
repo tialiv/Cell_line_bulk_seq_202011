@@ -2,6 +2,7 @@ channels:
 - conda-forge
 - bioconda
 - r
+- defaults
 dependencies:
 - snakemake-minimal
 - r-msigdbr=7.2.1
@@ -17,10 +18,10 @@ dependencies:
 - r-venndiagram=1.6.20
 - r-ggplot2=3.3.3
 - r-BiocManager=1.30.12
-- python
-- r-argparse
+- python=3.9.2
+- r-argparse=2.0.3
 - rstudio=1.1.456
 - r-rmarkdown=2.7
 - r-pheatmap=1.0.12
-- r-base
-- r-digest
+- r-base=4.0.3
+- r-digest=0.6.27
