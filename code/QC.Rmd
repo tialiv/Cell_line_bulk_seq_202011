@@ -46,10 +46,10 @@ rownames(cells_ordered) <- gene
 cells_ordered <- cells_ordered[,-1]
 all(info$sample == colnames(cells_ordered))
 
-info <- info[-6,]
-genomic_idx <- match(info$sample, colnames(cells_ordered))
-genomic_idx
-cells_ordered <- cells_ordered[ ,genomic_idx]
+#info <- info[-6,]
+#genomic_idx <- match(info$sample, colnames(cells_ordered))
+#genomic_idx
+#cells_ordered <- cells_ordered[ ,genomic_idx]
 ```
 
 ## Construct dds object

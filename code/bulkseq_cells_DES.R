@@ -282,7 +282,7 @@ ggsave(filename="gsea plot with hallmark_0_05_BH_with DES6 KGN gene_20210414.jpe
 
 ###############visualization##############
 library(pheatmap)
-NR <- read.csv("nuclear receptor.csv", sep = ";", header = T)
+NR <- read.csv("/Users/tili/Desktop/Results/PCR/bulk seq_primary_KGN_COV/DESeq2/nuclear receptor.csv", sep = ";", header = T)
 NR <- merge(output, NR, by.x = "ensembl_gene_id", by.y = "geneID", all.x = F, all.y = T)
 
 NR <- na.omit(NR)
