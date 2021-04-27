@@ -8,10 +8,10 @@ output:
     toc_float: true
     number_sections: true
 params:
-    counts_matrix: "/data/subreadCounts.txt"
-    sample_info: "/data/info.csv"
-    cell_line: "COV434 KGN Primary"
-    chemical: "DES KTZ" 
+    counts_matrix: NULL
+    sample_info: NULL
+    cell_line: NULL
+    chemical: NULL 
 ---
 
 ```{r setup, include=FALSE}
@@ -35,17 +35,31 @@ library(biomaRt)
 ## Data input
 
 ```{r data input}
-cells <- read.delim(file = "/Users/tili/Desktop/try/data/DES.txt")
-info <- read.csv(file = "/Users/tili/Desktop/try/data/info.csv", header = T, sep = ";")
-cells[is.na(cells)] <- 0 
-cell_line <- unlist(strsplit(params$cell_line, " "))
-chemical <- unlist(strsplit(params$chemical, " "))
+cells_ordered <- read.delim(file = "/Users/tili/Desktop/Cell_line_bulk_seq_202011/data/processed/cells_KTZ_COV434.csv", header = T, sep = ",")
+info <- read.csv(file = "/Users/tili/Desktop/Cell_line_bulk_seq_202011/data/processed/info_KTZ_COV434.csv", header = T, sep = ",")
+
+gene <- cells_ordered[,1] 
+rownames(cells_ordered) <- gene 
+cells_ordered <- cells_ordered[,-1]
+all(info$sample == colnames(cells_ordered))
+
+info <- info[-6,]
+genomic_idx <- match(info$sample, colnames(cells_ordered))
+genomic_idx
+cells_ordered <- cells_ordered[ ,genomic_idx]
 ```
 
 ## Construct dds object
 
 ```{r construct dds object}
 dds <- DESeqDataSetFromMatrix(countData=cells_ordered, colData = info, design = ~ group) 
+```
+
+## Low count genes filtering 
+
+```{r low count filtering}
+keep <- rowSums(counts(dds)) >= 1 
+dds <- dds[keep,]
 ```
 
 ## Set refernece group
@@ -59,12 +73,16 @@ dds$group <- relevel(dds$group, ref = "DMSO")
 ```{r DE analysis}
 dds <-DESeq(dds)
 
-res <- results(dds, contrast = c("group", "DES_10-10M", "DMSO"), independentFiltering = T, pAdjustMethod = "fdr")
-res <- results(dds, contrast = c("group", "DES_10-6M", "DMSO"), independentFiltering = T, pAdjustMethod = "fdr")
-res.sig <- as.data.frame(res.sig)
+#res <- results(dds, contrast = c("group", "DES_10-10M", "DMSO"), independentFiltering = T, pAdjustMethod = "fdr")
+#res <- results(dds, contrast = c("group", "DES_10-6M", "DMSO"), independentFiltering = T, pAdjustMethod = "fdr")
+#res <- results(dds, contrast = c("group", params$input, "DMSO"), independentFiltering = T, pAdjustMethod = "fdr")
+#res <- results(dds, contrast = c("group", "KTZ_10-5M", "DMSO"), independentFiltering = T, pAdjustMethod = "fdr")
+res <- results(dds, contrast = c("group", "KTZ_10-9M", "DMSO"), independentFiltering = T, pAdjustMethod = "fdr")
+
 res.sig <- res[which(res$padj<0.05),]
 res.sig <- res.sig[order(res.sig$padj),]
 summary(res.sig)
+res.sig <- as.data.frame(res.sig)
 ```
 
 ## Plot MA plot
@@ -76,15 +94,23 @@ plotMA(res)
 ## Shrunk results for downstream functional analysis
 
 ```{r shrunk results}
-contrast <- c("group", "DES_10-10M", "DMSO") 
-# for the functional analysis such as GO analysis, shrinkage of the fold changes is recommended
-res_shrunk <- results(dds, contrast = contrast, alpha = 0.05)
-res_shrunk <- lfcShrink(dds, coef = 2, type = "apeglm", lfcThreshold = 1)
+#contrast <- c("group", "DES_10-10M", "DMSO") 
+#contrast <- c("group", "DES_10-6M", "DMSO")
+#contrast <- c("group", params$input, "DMSO") 
+#contrast <- c("group", "KTZ_10-5M", "DMSO") 
+contrast <- c("group", "KTZ_10-9M", "DMSO")
 
-res.sig.shrunk <- data.frame(res_shrunk)
-res.sig.shrunk <- res_shrunk[which(res_shrunk$svalue<0.05),]
-res.sig.shrunk <- res.sig.shrunk[order(res.sig.shrunk$svalue),]
+# for the functional analysis such as GO analysis, shrinkage of the fold changes is recommended
+#res_shrunk <- results(dds, contrast = contrast, independentFiltering = T, pAdjustMethod = "fdr")
+#res_shrunk <- lfcShrink(dds, coef = "group_DES_10.10M_vs_DMSO", type = "apeglm")
+#res_shrunk <- lfcShrink(dds, coef = "group_DES_10.6M_vs_DMSO", type = "apeglm")
+res_shrunk <- lfcShrink(dds, coef = "group_KTZ_10.9M_vs_DMSO", type = "apeglm")
+#res_shrunk <- lfcShrink(dds, coef = "group_KTZ_10.5M_vs_DMSO", type = "apeglm")
+
+res.sig.shrunk <- res_shrunk[which(res_shrunk$padj<0.05),]
+res.sig.shrunk <- res.sig.shrunk[order(res.sig.shrunk$padj),]
 summary(res.sig.shrunk)
+res.sig.shrunk <- data.frame(res.sig.shrunk)
 ```
 
 ## get gene names from gene id
@@ -95,11 +121,13 @@ output <- getBM(attributes=c("ensembl_gene_id","external_gene_name","entrezgene_
 res.sig <- as.data.frame(res.sig)
 res.sig$geneID <- rownames(res.sig)
 final <- merge(res.sig, output, by.x = "geneID", by.y = "ensembl_gene_id", all.x = T, all.y = F)
+knitr::kable(final)
 
 output <- getBM(attributes=c("ensembl_gene_id","external_gene_name","entrezgene_id","description"), mart = mart)
 res.sig.shrunk <- as.data.frame(res.sig.shrunk)
 res.sig.shrunk$geneID <- rownames(res.sig.shrunk)
 final_shrunk <- merge(res.sig.shrunk, output, by.x = "geneID", by.y = "ensembl_gene_id", all.x = T, all.y = F)
+knitr::kable(final_shrunk)
 ```
 
 # Get background gene sets
@@ -114,7 +142,7 @@ all <- merge(all_genes, output, by.x = "geneID", by.y = "ensembl_gene_id", all.x
 
 # Get log2FC and entrezgene id for functional analysis
 
-```{r get background genes for functional analysis}
+```{r get gene list for gsea analysis}
 genelist <- all %>% 
   dplyr::select(entrezgene_id, log2FoldChange) 
 
@@ -126,10 +154,12 @@ List <- sort(List, decreasing = T)
 ## Save the output data
 
 ```{r save output}
-write.csv(final, file = "/Users/tili/Desktop/try/results/sig_0_05_DE_genes.csv")
-write.csv(final_shrunk, file = "/Users/tili/Desktop/try/results/sig_0_05_DE_genes_shrunk.csv")
-write.csv(all, file = "/Users/tili/Desktop/try/results/background_genes_shrunk.csv")
-write.csv(List, file = "/Users/tili/Desktop/try/results/background_genes_list_log2fc_shrunk.csv")
+write.csv(final, file = "/Users/tili/Desktop/Cell_line_bulk_seq_202011/results/sig_0_05_DE_genes_KTZ9_COV.csv")
+write.csv(final_shrunk, file = "/Users/tili/Desktop/Cell_line_bulk_seq_202011/results/sig_0_05_DE_genes_shrunk_KTZ9_COV.csv")
+write.csv(all, file = "/Users/tili/Desktop/Cell_line_bulk_seq_202011/results/background_genes_shrunk_KTZ9_COV.csv")
+#write.csv(all, file = params$output)
+#write.csv(final, file = params$output)
+
 ```
 
 ```{r Session info}
