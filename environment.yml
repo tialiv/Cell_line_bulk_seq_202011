@@ -1,7 +1,6 @@
 channels:
 - conda-forge
 - bioconda
-- r
 - defaults
 dependencies:
 - snakemake-minimal
@@ -25,3 +24,5 @@ dependencies:
 - r-pheatmap=1.0.12
 - r-base=4.0.3
 - r-digest=0.6.27
+- bioconductor-apeglm 
+
