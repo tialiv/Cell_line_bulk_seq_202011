@@ -38,8 +38,8 @@ library(umap)
 ## Data input
 
 ```{r data input}
-cells_ordered <- read.delim(file = "/Users/tili/Desktop/Cell_line_bulk_seq_202011/data/processed/cells_KTZ_COV434.csv", header = T, sep = ",")
-info <- read.csv(file = "/Users/tili/Desktop/Cell_line_bulk_seq_202011/data/processed/info_KTZ_COV434.csv", header = T, sep = ",")
+cells_ordered <- read.delim(file = "/Users/tili/Desktop/Cell_line_bulk_seq_202011/data/processed/cells_DES_COV434.csv", header = T, sep = ",")
+info <- read.csv(file = "/Users/tili/Desktop/Cell_line_bulk_seq_202011/data/processed/info_DES_COV434.csv", header = T, sep = ",")
 
 gene <- cells_ordered[,1] 
 rownames(cells_ordered) <- gene 
@@ -47,9 +47,9 @@ cells_ordered <- cells_ordered[,-1]
 all(info$sample == colnames(cells_ordered))
 
 #info <- info[-6,]
-#genomic_idx <- match(info$sample, colnames(cells_ordered))
-#genomic_idx
-#cells_ordered <- cells_ordered[ ,genomic_idx]
+genomic_idx <- match(info$sample, colnames(cells))
+genomic_idx
+cells_ordered <- cells[ ,genomic_idx]
 ```
 
 ## Construct dds object
@@ -63,6 +63,9 @@ dds <- DESeqDataSetFromMatrix(countData=cells_ordered, colData = info, design = 
 ```{r sequence depth check, fig.height = 6, fig.width = 6}
 d <- info
 d$read <- colSums(counts(dds)) 
+qc <- d %>% select(sample, read, group) %>% 
+  group_by(group) %>% 
+  summarise(sd(read))
 theme <- theme(text=element_text(size=9),
                axis.text.x=element_text(color="black", angle = 90),
                axis.text.y=element_text(color="black"),
