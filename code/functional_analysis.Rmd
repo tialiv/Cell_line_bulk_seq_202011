@@ -19,7 +19,7 @@ params:
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-# Cell line bulk RNAseq analysis - DES and KTZ samples
+# Cell line bulk RNAseq analysis 
 
 Functional analysis.  
 
@@ -46,6 +46,7 @@ library(msigdbr)
 final <- read.csv(file = "/Users/tili/Desktop/Cell_line_bulk_seq_202011/results/tables/KTZ/sig_0_1_DE_genes_KTZ5_KGN.csv", header = T, sep = ",")
 final_shrunk <- read.csv(file = "/Users/tili/Desktop/Cell_line_bulk_seq_202011/results/tables/KTZ/sig_0_1_DE_genes_shrunk_KTZ5_KGN.csv", header = T, sep = ",")
 all <- read.csv(file = "/Users/tili/Desktop/Cell_line_bulk_seq_202011/results/tables/KTZ/background_genes_shrunk_KTZ5_KGN.csv", header = T, sep = ",")
+#all <- read.csv(file = "/Users/tili/Desktop/all_MIX_Primary_100X.csv", header = T, sep = ",")
 
 genelist <- all %>% 
   dplyr::select(entrezgene_id, log2FoldChange) 
