@@ -28,9 +28,28 @@ Rows in the raw count matrix is renamed using geneID. Chemicals and cell lines a
 
 ```{r Load dependencies}
 library(dplyr)
+library(tximport)
+library(readr)
+library(EnsDb.Hsapiens.v86)
+library(ensembldb)
+library(TxDb.Hsapiens.UCSC.hg19.knownGene)
 ```
 
 ## Raw data input
+
+```{r salmon data}
+tx2gene <- transcripts(EnsDb.Hsapiens.v86, return.type = "DataFrame") 
+tx2genes <- tx2gene %>% 
+  as.data.frame() %>% 
+  dplyr::select(gene_id, tx_name)
+
+txdb <- TxDb.Hsapiens.UCSC.hg19.knownGene
+k <- keys(txdb, keytype = "TXNAME")
+tx2gene <- select(txdb, k, "GENEID", "TXNAME")
+
+data <- tximport(file = "/Users/tili/Desktop/try/data/transcripts_quant/quant.sf",
+                 type="salmon", tx2gene = tx2gene)
+```
 
 ```{r initial data input}
 cells <- read.delim(file = "/Users/tili/Desktop/try/data/subreadCounts.txt")
