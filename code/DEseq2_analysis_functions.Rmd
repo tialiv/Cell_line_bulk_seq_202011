@@ -1,0 +1,381 @@
+---
+title: "Raw data process in DES and KTZ samples"
+author: "Tianyi"
+date: "4/22/2021"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+    number_sections: true
+---
+
+
+```{r setup, include = F}
+knitr::opts_chunk$set(echo = T)
+```
+
+# Cell line bulk RNAseq analysis - DES and KTZ samples
+
+Rows in the raw count matrix is renamed using geneID. Chemicals and cell lines are separated for the downstream analysis.  
+
+## Load required library
+
+```{r Load dependencies}
+suppressMessages(library(dplyr))
+suppressMessages(library(tximport))
+suppressMessages(library(S4Vectors))
+suppressMessages(library(readr))
+suppressMessages(library(EnsDb.Hsapiens.v86))
+suppressMessages(library(ensembldb))
+suppressMessages(library(DESeq2))
+suppressMessages(library(ggplot2))
+suppressMessages(library(pheatmap))
+suppressMessages(library(umap))
+suppressMessages(library(biomaRt))
+suppressMessages(library(org.Hs.eg.db))
+suppressMessages(library(DOSE))
+suppressMessages(library(pathview))
+suppressMessages(library(clusterProfiler))
+suppressMessages(library(pheatmap))
+suppressMessages(library(VennDiagram))
+suppressMessages(library(RColorBrewer))
+suppressMessages(library(msigdbr))
+suppressMessages(library(edgeR))
+```
+
+## Raw data input
+
+```{r salmon data}
+#tx2gene <- transcripts(EnsDb.Hsapiens.v86, return.type = "DataFrame") 
+#tx2genes <- tx2gene %>% 
+#  as.data.frame() %>% 
+#  dplyr::select(tx_name, gene_id)
+
+#info <- read.csv(file = "/Users/tili/Desktop/try/data/info.csv", header = T, sep = ";")
+#files <- file.path("/Users/tili/Desktop/Cell_line_bulk_seq_202011/data/salmon", "salmon", 
+#                   info$sample, 
+#                   "quant.sf")
+#names(files) <- factor(info$sample)
+#all(file.exists(files))
+#data <- tximport(files, type="salmon", tx2gene = tx2genes, ignoreTxVersion = T)
+```
+
+```{r initial data input}
+cells <- read.delim(file = "/Users/tili/Desktop/Cell_line_bulk_seq_202011/data/subreadCounts.txt")
+info <- read.csv(file = "/Users/tili/Desktop/Cell_line_bulk_seq_202011/data/info.csv", header = T, sep = ";")
+cells[is.na(cells)] <- 0 
+
+```
+
+## Rename rows for count matrix
+
+```{r rename row names for count matrix}
+re_name <- function(cells) {
+  gene <- cells[,1]
+  rownames(cells) <- gene
+  cells <- cells[,-1]
+  return(cells)
+}
+
+cells <- re_name(cells)
+
+re_order <- function(info, cells) {
+  genomic_idx <- match(info$sample, colnames(cells))
+  genomic_idx
+  cells <- cells[ ,genomic_idx]
+  all(info$sample == colnames(cells))
+  return(cells)
+}
+
+cells <- re_order(info, cells)
+
+```
+
+## Metadata filtering and reorder count matrix
+
+```{r metadata filtering}
+chemical <- factor(c("DES", "KTZ"))
+cell_line <- factor(c("COV434", "KGN", "Primary"))
+
+
+for (i in chemical) {
+  for (j in cell_line) {
+    info_chemical <- info %>% dplyr::filter(chemical == i | chemical == "DMSO") 
+    info_cellline <- info_chemical %>% dplyr::filter(cell_line == j)
+    write.csv(info_cellline, file = paste("/Users/tili/Desktop/Cell_line_bulk_seq_202011/data/processed/info_",
+                                          i,"_",j,".csv", sep = ""))
+    cells_ordered <- re_order(info_cellline, cells)
+    write.csv(cells_ordered, file = paste("/Users/tili/Desktop/Cell_line_bulk_seq_202011/data/processed/cells_",
+                                          i,"_",j,".csv", sep = ""))
+  }
+}  
+
+```
+
+```{r construct dds object}
+dataset <- vector(mode = "list", length = 0)
+for (i in chemical) {
+  for (j in cell_line) {
+    files <- paste0("/Users/tili/Desktop/Cell_line_bulk_seq_202011/data/processed/info_",                        
+                   i,"_",j,".csv")
+    info <- read.csv(file = files, sep = ",")
+    files_cells <- paste0("/Users/tili/Desktop/Cell_line_bulk_seq_202011/data/processed/cells_",
+                                          i,"_",j,".csv")
+    cells <- read.delim(file = files_cells, sep = ",")
+    cells <- re_name(cells)
+    print(all(info$sample == colnames(cells)))
+    dataset[[paste0("dds_", i, "_", j)]] <- DESeqDataSetFromMatrix(countData=cells, colData = info, design = ~ group)
+  }
+} 
+
+```
+
+## Plot library size / how many reads per sample
+
+```{r sequence depth check, fig.height = 6, fig.width = 6}
+
+#qc <- d %>% select(sample, read, group) %>% 
+#  group_by(group) %>% 
+#  summarise(sd(read))
+
+theme <- theme(text=element_text(size=9),
+               axis.text.x=element_text(color="black", angle = 90),
+               axis.text.y=element_text(color="black"),
+               axis.ticks=element_blank(),
+               strip.background = element_rect(colour=NA, fill=NA),
+               plot.background = element_blank(),
+               panel.grid.major = element_blank(),
+               panel.grid.minor = element_blank(),
+               panel.border = element_blank(),
+               axis.line.x = element_line(size=0.4),
+               axis.line.y = element_line(size=0.4),
+               panel.background = element_blank(),
+               legend.position = "bottom")
+
+qc_plot <- list()
+for (i in chemical) {
+  for (j in cell_line) {
+    files <- paste0("/Users/tili/Desktop/Cell_line_bulk_seq_202011/data/processed/info_",                        
+                   i,"_",j,".csv")
+    info <- read.csv(file = files, sep = ",")
+    gg <- info %>%
+          mutate(read = colSums(counts(dataset[[paste0("dds_", i, "_", j)]]))) %>% 
+            ggplot(aes(x=sample, y=read, fill = group)) + geom_bar(stat = "identity") + theme +
+            ggtitle("Samples Sequenced Read") + xlab("")
+    qc_plot[[length(qc_plot) + 1]] <- gg
+  }
+} 
+cowplot::plot_grid(ncol = 3, nrow = 2, plotlist = qc_plot) 
+
+```
+
+```{r low count filtering}
+
+for (i in chemical) {
+  for (j in cell_line) {
+    keep <- rowSums(counts(dataset[[paste0("dds_", i, "_", j)]])) >= 1 
+    dataset[[paste0("dds_", i, "_", j)]] <- (dataset[[paste0("dds_", i, "_", j)]])[keep,]
+  }
+} 
+
+```
+
+## PCA plot using normalized data
+
+### CPM normalization using edgeR cpm function
+
+```{r PCA plot cpm, fig.height = 4, fig.width = 6}
+PCA_cpm <- list()
+for (i in chemical) {
+  for (j in cell_line) {
+    files <- paste0("/Users/tili/Desktop/Cell_line_bulk_seq_202011/data/processed/info_",                        
+                   i,"_",j,".csv")
+    info <- read.csv(file = files, sep = ",")
+    r <- edgeR::cpm(counts(dataset[[paste0("dds_", i, "_", j)]]), normalized.lib.sizes = T, log = T)
+    pca <- prcomp(t(r))
+    df <- cbind(info, pca$x)
+    ggpca <- ggplot(df) + geom_point(aes(x=PC1, y = PC2, color = group)) + theme + 
+      ggtitle(paste0("PCA (cpm) - ", i, " ", j))
+    PCA_cpm[[length(PCA_cpm) + 1]] <- ggpca
+  }
+} 
+cowplot::plot_grid(ncol = 3, nrow = 2, plotlist = PCA_cpm) 
+
+```
+
+### vst normalization method in DESeq2
+
+```{r PCA plot vst, fig.height = 4, fig.width = 6}
+
+PCA_vst <- list()
+for (i in chemical) {
+  for (j in cell_line) {
+    r <- vst(dataset[[paste0("dds_", i, "_", j)]], blind = T, fitType='mean')
+    pca <- plotPCA(r, intgroup = c("group"), returnData = T) 
+    percentVar <- round(100 * attr(pca, "percentVar")) 
+    ggpca <- ggplot(pca, aes(PC1, PC2, color = group)) + 
+      ggtitle(paste0("PCA (vst) - ", i, " ", j)) + theme +
+      geom_point(size = 3) + xlab(paste0("PC1: ", percentVar[1], "% variance")) + 
+      ylab(paste0("PC2: ", percentVar[2], "% variance"))
+    PCA_vst[[length(PCA_vst) + 1]] <- ggpca
+  }
+} 
+cowplot::plot_grid(ncol = 3, nrow = 2, plotlist = PCA_vst) 
+
+```
+
+## UMAP visualization using normalization method
+
+```{r UMAP plot, fig.height = 4, fig.width = 6}
+
+umap_vst <- list()
+for (i in chemical) {
+  for (j in cell_line) {
+    r <- vst(dataset[[paste0("dds_", i, "_", j)]], blind = T, fitType='mean')
+    files <- paste0("/Users/tili/Desktop/Cell_line_bulk_seq_202011/data/processed/info_",                        
+                   i,"_",j,".csv")
+    info <- read.csv(file = files, sep = ",")
+    set.seed(1)
+    normalized_counts <- assay(r) %>% t()
+    umap_results <- umap::umap(normalized_counts, n_neighbors = 3) 
+    umap_plot_df <- data.frame(umap_results$layout) %>%
+    tibble::rownames_to_column("sample") %>% 
+    dplyr::inner_join(info, by = "sample")
+    gg <- ggplot(umap_plot_df, aes(x = X1, y = X2, color = group)) + geom_point(size = 2.5) + 
+      ggtitle(paste0("UMAP (vst) - ", i, " ", j)) + theme 
+    umap_vst[[length(umap_vst) + 1]] <- gg
+  }
+} 
+cowplot::plot_grid(ncol = 3, nrow = 2, plotlist = umap_vst) 
+
+```
+
+## Heatmap: hierarchical clustering to view the similarities between technical replicates
+
+```{r Heatmap for hierarchical clustering, fig.height = 4, fig.width = 6}
+
+heatmap_vst <- list()
+for (i in chemical) {
+  for (j in cell_line) {
+    r <- vst(dataset[[paste0("dds_", i, "_", j)]], blind = T, fitType='mean')
+    r_cor <- cor(assay(r))
+    df <- as.data.frame(colData(dataset[[paste0("dds_", i, "_", j)]])[,c("cell_line","group")])
+    ggmap <- pheatmap(r_cor, scale = "column", show_rownames = F, annotation = df, fontsize = 20,
+         clustering_distance_cols = "manhattan", main = paste0("Heatmap (vst) - ", i, " ", j))
+    heatmap_vst[[length(heatmap_vst) + 1]] <- ggmap
+  }
+} 
+#grid.arrange(heatmap_vst)
+#grid.arrange(heatmap_vst, ncol = 3, nrow = 2)
+
+```
+
+```{r set reference group}
+
+for (i in chemical) {
+  for (j in cell_line) {
+    dataset[[paste0("dds_", i, "_", j)]]$group <- relevel(dataset[[paste0("dds_", i, "_", j)]]$group,ref = "DMSO")
+  }
+} 
+
+```
+
+## DE analysis 
+
+```{r DE analysis}
+
+get_res <- function(x) {
+  res <- results(dataset[[paste0("dds_", i, "_", j)]], contrast = c("group", x, "DMSO"), 
+                 independentFiltering = T, pAdjustMethod = "fdr")
+  return(res)
+}
+
+check_sig <- function(res, pcutoff) {
+  res.sig <- res[which(res$padj < pcutoff),]
+  res.sig <- res.sig[order(res.sig$padj),]
+  summary(res.sig)
+  res.sig <- as.data.frame(res.sig)
+  return(res.sig)
+}
+
+comparison <- list()
+for (i in chemical) {
+  for (j in cell_line) {
+    dataset[[paste0("dds_", i, "_", j)]] <- DESeq(dataset[[paste0("dds_", i, "_", j)]])
+    files <- paste0("/Users/tili/Desktop/Cell_line_bulk_seq_202011/data/processed/info_",                        
+                   i,"_",j,".csv")
+    info <- read.csv(file = files, sep = ",")
+    info$group <- factor(info$group)
+    groups <- factor(levels(info$group)[levels(info$group) != "DMSO"]) 
+    for (k in groups) {
+      print(paste0("Differential expressed genes for"," ", k, " ", "vs DMSO", " ", i," ", j))
+      res <- get_res(k)
+      comparison[[paste0("res_", k, " ", i, " ", j)]] <- check_sig(res, 0.05) %>% as.data.frame() %>% 
+        mutate(geneid = rownames(.))
+      #assign(paste0("res_", k, " ", i, " ", j), comparison[[paste0("res_", k, " ", i, " ", j)]])
+    }
+  }
+} 
+
+```
+
+## Shrunk results for downstream functional analysis
+
+```{r shrunk results}
+# coef input should be like: "group_DES_10.6M_vs_DMSO"
+# x input should be like: "DES_10-6M"
+
+#get_shrunk <- function(x, coef) {
+#  res_shrunk <- results(dds, contrast = c("group", x, "DMSO"), 
+#                           independentFiltering = T, pAdjustMethod = "fdr")
+#  res_shrunk <- lfcShrink(dds, coef = coef, type = "apeglm")
+#  return(res_shrunk)
+#}
+
+#res6_shrunk <- get_shrunk("DES_10-6M", "group_DES_10.6M_vs_DMSO")
+#res10_shrunk <- get_shrunk("DES_10-10M", "group_DES_10.10M_vs_DMSO")
+
+#res6.shrunk.sig <- check_sig(res6_shrunk)
+#res10.shrunk.sig <- check_sig(res10_shrunk)
+
+```
+
+## get gene names from gene id
+
+```{r get gene names}
+mart <- useEnsembl(biomart = "ensembl",dataset = "hsapiens_gene_ensembl")
+output <- getBM(attributes=c("ensembl_gene_id","external_gene_name","entrezgene_id","description"), mart = mart)
+
+
+get_id <- function(res.sig) {
+  geneid <- rownames(res.sig)
+  final <- merge(res.sig, output, by.x = "geneid", by.y = "ensembl_gene_id", all.x = T, all.y = F)
+  return(final)
+}
+
+final <- list()
+for (i in chemical) {
+  for (j in cell_line) {
+    for (k in groups) {
+      final[[paste0("res_", k, " ", i, " ", j)]] <- lapply(comparison, get_id) 
+    }
+  }
+}
+
+final$`res_KTZ_10-5M DES COV434`
+
+
+```
+
+
+```{r save output}
+# write.csv(final, file = "/Users/tili/Desktop/Cell_line_bulk_seq_202011/results/sig_0_05_DE_genes_KTZ9_COV.csv")
+# write.csv(final_shrunk, file =  "/Users/tili/Desktop/Cell_line_bulk_seq_202011/results/sig_0_05_DE_genes_shrunk_KTZ9_COV.csv")
+# write.csv(all, file = "/Users/tili/Desktop/Cell_line_bulk_seq_202011/results/background_genes_shrunk_KTZ9_COV.csv")
+
+```
+
+
+```{r Session info}
+sessionInfo()
+```
