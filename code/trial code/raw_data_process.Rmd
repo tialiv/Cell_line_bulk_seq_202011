@@ -1,0 +1,136 @@
+---
+title: "Raw data process in DES and KTZ samples"
+author: "Tianyi"
+date: "4/22/2021"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+    number_sections: true
+---
+
+
+```{r setup, include = F}
+.libPaths("/Users/tili/miniconda3/envs/cell_bulk_202011/lib/R/library")
+knitr::opts_chunk$set(echo = T)
+```
+
+# Cell line bulk RNAseq analysis - DES and KTZ samples
+
+Rows in the raw count matrix is renamed using geneID. Chemicals and cell lines are separated for the downstream analysis.  
+
+## Load required library
+
+```{r Load dependencies}
+library(dplyr)
+library(tximport)
+library(S4Vectors)
+library(readr)
+library(EnsDb.Hsapiens.v86)
+library(ensembldb)
+library(DESeq2)
+library(ggplot2)
+library(pheatmap)
+library(umap)
+library(biomaRt)
+library(org.Hs.eg.db)
+library(DO.db)
+library(DOSE)
+library(pathview)
+library(clusterProfiler)
+library(pheatmap)
+library(VennDiagram)
+library(RColorBrewer)
+library(msigdbr)
+```
+
+## Raw data input
+
+```{r salmon data}
+tx2gene <- transcripts(EnsDb.Hsapiens.v86, return.type = "DataFrame") 
+tx2genes <- tx2gene %>% 
+  as.data.frame() %>% 
+  dplyr::select(tx_name, gene_id)
+
+info <- read.csv(file = "/Users/tili/Desktop/try/data/info.csv", header = T, sep = ";")
+files <- file.path("/Users/tili/Desktop/Cell_line_bulk_seq_202011/data/salmon", "salmon", 
+                   info$sample, 
+                   "quant.sf")
+names(files) <- factor(info$sample)
+all(file.exists(files))
+data <- tximport(files, type="salmon", tx2gene = tx2genes, ignoreTxVersion = T)
+```
+
+```{r initial data input}
+cells <- read.delim(file = "/Users/tili/Desktop/Cell_line_bulk_seq_202011/data/subreadCounts.txt")
+info <- read.csv(file = "/Users/tili/Desktop/Cell_line_bulk_seq_202011/data/info.csv", header = T, sep = ";")
+cells[is.na(cells)] <- 0 
+
+```
+
+## Rename rows for count matrix
+
+```{r rename row names for count matrix}
+re_name <- function(cells) {
+  gene <- cells[,1]
+  rownames(cells) <- gene
+  cells <- cells[,-1]
+  return(cells)
+}
+
+#gene <- cells[,1] 
+#rownames(cells) <- gene 
+#cells <- cells[,-1] 
+
+cells <- re_name(cells)
+
+re_order <- function(info, cells) {
+  genomic_idx <- match(info$sample, colnames(cells))
+  genomic_idx
+  cells <- cells[ ,genomic_idx]
+  all(info$sample == colnames(cells))
+  return(cells)
+}
+
+cells <- re_order(info, cells)
+
+```
+
+## Metadata filtering and reorder count matrix
+
+```{r metadata filtering}
+chemical <- factor(c("DES", "KTZ"))
+cell_line <- factor(c("COV434", "KGN", "Primary"))
+dds_i_j <- matrix(nrow = 6) %>% as.list()
+
+for (i in chemical) {
+  for (j in cell_line) {
+    info_chemical <- info %>% dplyr::filter(chemical == i | chemical == "DMSO") 
+    info_cellline <- info_chemical %>% dplyr::filter(cell_line == j)
+    write.csv(info_cellline, file = paste("/Users/tili/Desktop/Cell_line_bulk_seq_202011/data/processed/info_",
+                                          i,"_",j,".csv", sep = ""))
+    cells_ordered <- re_order(info_cellline, cells)
+    write.csv(cells_ordered, file = paste("/Users/tili/Desktop/Cell_line_bulk_seq_202011/data/processed/cells_",
+                                          i,"_",j,".csv", sep = ""))
+  }
+}  
+
+for (i in chemical) {
+  for (j in cell_line) {
+    files <- paste0("/Users/tili/Desktop/Cell_line_bulk_seq_202011/data/processed/info_",                        
+                   i,"_",j,".csv")
+    info <- read.csv(file = files, sep = ",")
+    files_cells <- paste0("/Users/tili/Desktop/Cell_line_bulk_seq_202011/data/processed/cells_",
+                                          i,"_",j,".csv")
+    cells <- read.delim(file = files_cells, sep = ",")
+    cells <- re_name(cells)
+    dds <- DESeqDataSetFromMatrix(countData=cells, colData = info, design = ~ group)
+  }
+}  
+ 
+```
+
+
+```{r Session info}
+sessionInfo()
+```
