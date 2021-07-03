@@ -171,12 +171,18 @@ cowplot::plot_grid(ncol = 3, nrow = 2, plotlist = qc_plot)
 
 ```{r low count filtering}
 
-for (i in chemical) {
-  for (j in cell_line) {
-    keep <- rowSums(counts(dataset[[paste0("dds_", i, "_", j)]])) >= 1 
-    dataset[[paste0("dds_", i, "_", j)]] <- (dataset[[paste0("dds_", i, "_", j)]])[keep,]
-  }
-} 
+#for (i in chemical) {
+#  for (j in cell_line) {
+#    keep <- rowSums(counts(dataset[[paste0("dds_", i, "_", j)]])) >= 1 
+#    dataset[[paste0("dds_", i, "_", j)]] <- (dataset[[paste0("dds_", i, "_", j)]])[keep,]
+#  }
+#} 
+
+dataset <- lapply(dataset, function(x) {
+  keep <- rowSums(counts(x)) >= 1
+  x <- x[keep,]
+})
+
 
 ```
 
@@ -260,7 +266,7 @@ for (i in chemical) {
     r <- vst(dataset[[paste0("dds_", i, "_", j)]], blind = T, fitType='mean')
     r_cor <- cor(assay(r))
     df <- as.data.frame(colData(dataset[[paste0("dds_", i, "_", j)]])[,c("cell_line","group")])
-    ggmap <- pheatmap(r_cor, scale = "column", show_rownames = F, annotation = df, fontsize = 20,
+    ggmap <- pheatmap(r_cor, scale = "column", show_rownames = F, annotation = df, fontsize = 15,
          clustering_distance_cols = "manhattan", main = paste0("Heatmap (vst) - ", i, " ", j))
     heatmap_vst[[length(heatmap_vst) + 1]] <- ggmap
   }
@@ -276,7 +282,7 @@ for (i in chemical) {
   for (j in cell_line) {
     dataset[[paste0("dds_", i, "_", j)]]$group <- relevel(dataset[[paste0("dds_", i, "_", j)]]$group,ref = "DMSO")
   }
-} 
+}
 
 ```
 
@@ -353,17 +359,20 @@ get_id <- function(res.sig) {
   return(final)
 }
 
-final <- list()
-for (i in chemical) {
-  for (j in cell_line) {
-    for (k in groups) {
-      final[[paste0("res_", k, " ", i, " ", j)]] <- lapply(comparison, get_id) 
-    }
-  }
-}
+#final <- list()
+#for (i in chemical) {
+#  for (j in cell_line) {
+#    for (k in groups) {
+#      final[[paste0("res_", k, " ", i, " ", j)]] <- lapply(comparison, get_id) 
+#    }
+#  }
+#}
 
-final$`res_KTZ_10-5M DES COV434`
+final <- lapply(comparison, function(x) {
+  x <- get_id(x)
+})
 
+final 
 
 ```
 
