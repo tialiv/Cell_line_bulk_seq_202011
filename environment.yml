@@ -1,28 +1,27 @@
 channels:
-- conda-forge
 - bioconda
-- r
+- conda-forge
 - defaults
 dependencies:
 - r-msigdbr
 - bioconductor-org.Hs.eg.db
-- bioconductor-deseq2=1.30.1
+- bioconductor-deseq2
 - bioconductor-clusterProfiler
-- bioconductor-biomaRt
 - bioconductor-pathview
+- bioconductor-dose
+- bioconductor-do.db
+- bioconductor-ggtree
+- r-rvcheck=0.1.8
+- r-base=4.0.5
+- bioconductor-biomaRt
 - r-umap
 - r-RColorBrewer
 - r-dplyr
-- bioconductor-DOSE
-- r-venndiagram
 - r-ggplot2
 - r-BiocManager
 - python
-- r-argparse
 - r-rmarkdown
 - r-pheatmap
-- r-base=4.0.5
-- r-digest
 - bioconductor-apeglm 
 - r-tidyverse
 - rstudio
@@ -30,6 +29,24 @@ dependencies:
 - r-readr
 - bioconductor-ensdb.hsapiens.v86
 - bioconductor-ensembldb
-- bioconductor-s4vectors
-- bioconductor-edger 
+- bioconductor-edger
+- bioconductor-limma
+- r-patchwork
+- r-seurat
+- r-cowplot
+- r-clustree
+- r-venndiagram 
+- r-ggraph
+- bioconductor-singlecellexperiment
+- r-matrix.utils
+- r-Matrix
+- bioconductor-slingshot
+- bioconductor-singler
+- bioconductor-ggtree 
+- r-swamp
+- r-openxlsx
+- bioconductor-gsva
+- bioconductor-gseabase
+
+
 

@@ -32,9 +32,12 @@ all(info$name == colnames(cells))
 # adult <- as.data.frame(apply(adult, 2, as.numeric))
 # rownames(adult) <- gene
 
+info <- info %>% filter(chemical != "KTZ")
+cells <- re_order(info, cells)
+
 ############DES dataset construction#################
 library(DESeq2)
-dds <- DESeqDataSetFromMatrix(countData=cells_ordered, colData = info, design = ~ media + forskolin) 
+dds <- DESeqDataSetFromMatrix(countData=cells, colData = info, design = ~ cell_line + group) 
 hist(log(counts(dds))) #if it is a skewed dataset, needs transformation
 colSums(counts(dds)) # how many reads were sequenced for each sample (library size)
 d <- info
@@ -314,6 +317,49 @@ pheatmap(assay(r)[select,], cluster_rows=FALSE, show_rownames=T,
 
 
 ###########plot individual genes################
+
+des <- read.csv("/Users/tili/Desktop/Cell_line_bulk_seq_202011/results/figures/des.csv", header = T, sep = ";")
+ktz <- read.csv("/Users/tili/Desktop/Cell_line_bulk_seq_202011/results/figures/ktz.csv", header = T, sep = ";")
+
+col <- c("DMSO" = "#fdcdac","KTZ_10-9M" = "#b2e2e2",
+         #"KTZ_10-5M" = "#238b45")
+         "DES_10-10M" = "#b3cde3","DES_10-6M" = "#88419d") 
+des_plot <- list()
+for (i in 1:17) {
+  geneid <- des[i, 2]
+  gene <- des[i,1]
+  d <- plotCounts(dds, gene = geneid, intgroup = c("group","cell_line"), normalized = T, returnData=TRUE)
+  des_plot[[gene]] <- ggplot(d, aes(x = group, y = count, fill = group)) + geom_boxplot() +
+    geom_point(size = 2, alpha = 0.5) + facet_grid(~ cell_line) + ylab("Normalized counts") + xlab(" ") +
+    theme + ggtitle(gene) + scale_x_discrete(limit = c("DMSO", "DES_10-10M", "DES_10-6M"
+                                                       #, "KTZ_10-9M", "KTZ_10-5M"
+                                                       )) +
+    scale_fill_manual(values = col) + theme(legend.position="none")
+}
+
+cowplot::plot_grid(nrow = 3, ncol = 3, plotlist = des_plot[1:9], 
+                   labels = "AUTO")
+cowplot::plot_grid(nrow = 3, ncol = 3, plotlist = des_plot[10:17], 
+                   labels = "AUTO")
+
+ktz_plot <- list()
+for (i in 1:18) {
+  geneid <- ktz[i, 2]
+  gene <- ktz[i,1]
+  d <- plotCounts(dds, gene = geneid, intgroup = c("group","cell_line"), normalized = T, returnData=TRUE)
+  ktz_plot[[gene]] <- ggplot(d, aes(x = group, y = count, fill = group)) + geom_boxplot() +
+    geom_point(size = 2, alpha = 0.5) + facet_grid(~ cell_line) + ylab("Normalized counts") + xlab(" ") +
+    theme + ggtitle(gene) + scale_x_discrete(limit = c("DMSO", 
+                                                       #"DES_10-10M", "DES_10-6M",
+                                                       "KTZ_10-9M", "KTZ_10-5M")) +
+    scale_fill_manual(values = col) + theme(legend.position="none")
+}
+
+cowplot::plot_grid(nrow = 3, ncol = 3, plotlist = ktz_plot[1:9], 
+                   labels = "AUTO")
+cowplot::plot_grid(nrow = 3, ncol = 3, plotlist = ktz_plot[10:18], 
+                   labels = "AUTO")
+
 d <- plotCounts(dds, gene="ENSG00000146648", intgroup="group", normalized = T,
                 returnData=TRUE) # gene argument can be either row name or numeric index
 ggplot(d, aes(x=group, y=count)) + geom_boxplot() +
