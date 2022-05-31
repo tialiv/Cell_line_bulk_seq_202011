@@ -48,13 +48,13 @@ ggplot(d, aes(x=sample, y=read, fill = cell_line)) + geom_bar(stat = "identity")
 boxplot(log2(counts(dds) + 1), notch = TRUE) 
 
 #########remove low counts##########
-keep <- rowSums(counts(dds)) >= 1 
+keep <- rowSums(counts(dds)) >= 10 
 dds <- dds[keep,]
 boxplot(log2(counts(dds) + 1), notch = TRUE) 
 
 ############Checking the data cluster and plot PCA########
 library(ggplot2)
-r <- vst(dds, blind = T)
+r <- vst(dds, blind = F)
 theme <- theme(text=element_text(size=9),
                axis.text.x=element_text(color="black", angle = 90),
                axis.text.y=element_text(color="black"),
@@ -103,8 +103,8 @@ umap_plot_df <- data.frame(umap_results$layout) %>%
   tibble::rownames_to_column("sample") %>% 
   dplyr::inner_join(info, by = "sample")
 
-ggplot(umap_plot_df, aes(x = X1, y = X2, color = cell_line, shape = forskolin)) + geom_point(size = 2.5) + theme +
-  ggtitle("UMAP")
+umap <- ggplot(umap_plot_df, aes(x = X1, y = X2, color = cell_line)) + geom_point(size = 2.5) + theme +
+  ggtitle("UMAP") + scale_color_manual(values = c("#A58AFF","#53B400", "#00B6EB")) + xlab("UMAP1") + ylab("UMAP2")
 
 ggsave(filename="cell bulk seq UMAP 201208.jpeg", 
        plot = last_plot(), device = NULL, path = NULL,
