@@ -1,11 +1,26 @@
-# Project template
+# Project 
 
-Project template for setting up a directory and file structure for a new research project.
-The intended contents of each directory is explained in separate README.md files.
+Bulk RNA sequencing project on ovarian cell lines (COV434, KGN, primary ovarian cells) after exposure to DMSO, DES 10-6M & 10-10M and KTZ 10-5M & 10-9M.
 
-## Overview
+## Analysis environment in R
+
+Conda environment for analysis in R can be created using the environment.yml file
 
 ```
+
+# Create conda environment
+conda env create -f environment.yml -n rna
+
+# Activate the environment
+conda activate rna
+
+# Running RStudio and run the code
+rstudio &
+
+# Deactivate the environment when finishing analysis
+conda deactivate
+
+
 project
 |- doc/                documentation for the study
 |
