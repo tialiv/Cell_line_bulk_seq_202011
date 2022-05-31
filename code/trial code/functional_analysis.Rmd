@@ -1,0 +1,139 @@
+---
+title: "Functional analysis"
+author: "Tianyi"
+date: "4/23/2021"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+    number_sections: true
+params:
+    counts_matrix: NULL
+    sample_info: NULL
+    cell_line: NULL
+    chemical: NULL 
+---
+
+```{r setup, include=FALSE}
+.libPaths("/Users/tili/miniconda3/envs/cell_bulk_202011/lib/R/library")
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Cell line bulk RNAseq analysis 
+
+Functional analysis.  
+
+## Load required library
+
+```{r Load dependencies}
+library(DESeq2)
+library(dplyr)
+library(ggplot2)
+library(biomaRt)
+library(org.Hs.eg.db)
+library(DOSE)
+library(pathview)
+library(clusterProfiler)
+library(pheatmap)
+library(VennDiagram)
+library(RColorBrewer)
+library(msigdbr)
+```
+
+## Data input
+
+```{r data input}
+final <- read.csv(file = "/Users/tili/Desktop/Cell_line_bulk_seq_202011/results/tables/KTZ/sig_0_1_DE_genes_KTZ5_KGN.csv", header = T, sep = ",")
+final_shrunk <- read.csv(file = "/Users/tili/Desktop/Cell_line_bulk_seq_202011/results/tables/KTZ/sig_0_1_DE_genes_shrunk_KTZ5_KGN.csv", header = T, sep = ",")
+all <- read.csv(file = "/Users/tili/Desktop/Cell_line_bulk_seq_202011/results/tables/KTZ/background_genes_shrunk_KTZ5_KGN.csv", header = T, sep = ",")
+#all <- read.csv(file = "/Users/tili/Desktop/all_MIX_Primary_100X.csv", header = T, sep = ",")
+
+genelist <- all %>% 
+  dplyr::select(entrezgene_id, log2FoldChange) 
+
+List <- genelist$log2FoldChange
+names(List) <- as.character(genelist$entrezgene_id)
+List <- sort(List, decreasing = T)
+```
+
+## GO analysis
+
+```{r GO analysis and save rds object}
+ego <- enrichGO(gene = final_shrunk$geneID, universe = all$geneID, keyType = "ENSEMBL",
+                OrgDb = org.Hs.eg.db, ont = "ALL", pAdjustMethod = "BH", 
+                qvalueCutoff = 0.1, readable = TRUE)
+
+cluster_summary <- data.frame(ego)
+knitr::kable(cluster_summary)
+
+```
+
+## Plot GO analysis results
+
+```{r plot GO analysis results}
+#dotplot(ego, showCategory=50) 
+#emapplot(ego, showCategory = 50)
+
+#foldchange <- final_shrunk$log2FoldChange
+#names(foldchange) <- final_shrunk$external_gene_name
+#cnetplot(ego, categorySize="pvalue", showCategory = 5, foldChange=foldchange, vertex.label.font=6)
+```
+
+## Msigdb gene set analysis
+
+```{r Msigdb gene set analysis}
+# msigdbr_species()
+# msigdbr_collections()
+
+msigHs_c2 <- msigdbr(species = "Homo sapiens", category = "C2") %>%
+  select(gs_name, entrez_gene) %>% 
+  as.data.frame()
+
+msigHs_h <- msigdbr(species = "Homo sapiens", category = "H") %>%
+  select(gs_name, entrez_gene) %>% 
+  as.data.frame()
+
+enrich <- enricher(gene = all$entrezgene_id, TERM2GENE = msigHs_h,
+                   pvalueCutoff = 0.05,
+                   pAdjustMethod = "BH",
+                   minGSSize = 10,
+                   maxGSSize = 500)
+enrich <- data.frame(enrich) %>% 
+  select(GeneRatio, BgRatio, pvalue, p.adjust, qvalue, geneID, Count)
+knitr::kable(enrich)
+#write.csv(enrich, file = "enricher with hallmark_0_05_BH_DES6_KGN_20210425.csv")
+
+edo <- GSEA(geneList = List, minGSSize = 10, maxGSSize = 500,
+            pvalueCutoff = 1,
+            pAdjustMethod = "BH",
+            TERM2GENE = msigHs_h)
+top10 <- data.frame(edo@result) 
+knitr::kable(top10)
+#write.csv(top10, file = "gsea with hallmark_1_BH_DES6_KGN_20210425.csv")
+```
+
+## Plot GSEA plot
+
+```{r GSEA plot}
+# gseaplot(edo, geneSetID = 1, by = "runningScore", title = edo$Description[1])
+# gseaplot(edo, geneSetID = 1, by = "preranked", title = edo$Description[1])
+gsea1 <- c("HALLMARK_PI3K_AKT_MTOR_SIGNALING","HALLMARK_ANDROGEN_RESPONSE",
+           "HALLMARK_TGF_BETA_SIGNALING","HALLMARK_MTORC1_SIGNALING")
+id1 <- match(gsea1, edo@result$ID)
+enrichplot::gseaplot2(edo, geneSetID = id1)
+gsea2 <- c("HALLMARK_CHOLESTEROL_HOMEOSTASIS","HALLMARK_WNT_BETA_CATENIN_SIGNALING",
+           "HALLMARK_FATTY_ACID_METABOLISM","HALLMARK_ESTROGEN_RESPONSE_EARLY")
+id2 <- match(gsea2, edo@result$ID)
+enrichplot::gseaplot2(edo, geneSetID = id2)
+
+# enrichplot::gseaplot2(edo, geneSetID = 16, title = edo$Description[16])
+
+# ggsave(filename="gsea plot with hallmark_0_05_BH_with DES6 KGN gene_20210414.jpeg", 
+#       plot = last_plot(), device = NULL, path = NULL,
+#       scale = 1, width = NA, height = NA, 
+#       dpi = 300)
+```
+
+```{r Session info}
+sessionInfo()
+```

@@ -1,0 +1,1261 @@
+---
+title: "Raw data process in DES and KTZ samples"
+author: "Tianyi"
+date: "07/29/2021"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+    number_sections: true
+editor_options: 
+  chunk_output_type: console
+---
+
+
+```{r setup, include = F}
+knitr::opts_chunk$set(echo = T)
+```
+
+# Cell line bulk RNAseq analysis - DES and KTZ samples
+
+Rows in the raw count matrix is renamed using geneID. Chemicals and cell lines are separated for the downstream analysis.  
+
+## Load required library
+
+```{r Load dependencies}
+suppressMessages(library(dplyr))
+suppressMessages(library(tximport))
+suppressMessages(library(S4Vectors))
+suppressMessages(library(readr))
+suppressMessages(library(EnsDb.Hsapiens.v86))
+suppressMessages(library(ensembldb))
+suppressMessages(library(DESeq2))
+suppressMessages(library(ggplot2))
+suppressMessages(library(pheatmap))
+suppressMessages(library(umap))
+suppressMessages(library(biomaRt))
+suppressMessages(library(org.Hs.eg.db))
+suppressMessages(library(DOSE))
+suppressMessages(library(pathview))
+suppressMessages(library(clusterProfiler))
+suppressMessages(library(pheatmap))
+suppressMessages(library(VennDiagram))
+suppressMessages(library(RColorBrewer))
+suppressMessages(library(msigdbr))
+suppressMessages(library(edgeR))
+suppressMessages(library(stringr))
+suppressMessages(library(future))
+suppressMessages(library(patchwork))
+suppressMessages(library(VennDiagram))
+suppressMessages(library(swamp))
+```
+
+## Raw data input
+
+### Data from salmon alignment
+
+```{r salmon data import}
+tx2gene <- transcripts(EnsDb.Hsapiens.v86, return.type = "DataFrame") 
+tx2genes <- tx2gene %>% 
+  as.data.frame() %>% 
+  dplyr::select(tx_name, gene_id)
+
+sample <- list.files("/Users/tili/Desktop/Cell_line_bulk_seq_202011/data/salmon")
+files <- file.path("/Users/tili/Desktop/Cell_line_bulk_seq_202011/data", "salmon", sample, "quant.sf")
+
+names(files) <- sample
+all(file.exists(files))
+data <- tximport(files, type="salmon", tx2gene = tx2genes, ignoreTxVersion = T)
+
+info <- read.csv(file = "/Users/tili/Desktop/Cell_line_bulk_seq_202011/data/info.csv", header = T, sep = ";")
+cells <- data$counts %>% 
+  ceiling() %>% 
+  as.data.frame()
+```
+
+### Data from STAR alignment
+
+```{r initial data input}
+cells <- read.delim(file = "/Users/tili/Desktop/Cell_line_bulk_seq_202011/data/subreadCounts.txt")
+info <- read.csv(file = "/Users/tili/Desktop/Cell_line_bulk_seq_202011/data/info.csv", header = T, sep = ";")
+cells[is.na(cells)] <- 0 
+
+```
+
+## Rename rows for count matrix
+
+```{r rename row names for count matrix}
+re_name <- function(cells) {
+  gene <- cells[,1]
+  rownames(cells) <- gene
+  cells <- cells[,-1]
+  return(cells)
+}
+
+cells <- re_name(cells)
+
+re_order <- function(info, cells) {
+  genomic_idx <- match(info$sample, colnames(cells))
+  genomic_idx
+  cells <- cells[ ,genomic_idx]
+  all(info$sample == colnames(cells))
+  return(cells)
+}
+
+info <- info[-c(46,
+  48:49,31:32),]
+
+cells <- re_order(info, cells)
+
+```
+
+## Metadata filtering and reorder count matrix
+
+```{r metadata filtering}
+chemical <- factor(c("DES", "KTZ"))
+cell_line <- factor(c("COV434", "KGN", "Primary"))
+
+
+for (i in chemical) {
+  for (j in cell_line) {
+    info_chemical <- info %>% dplyr::filter(chemical == i | chemical == "DMSO") 
+    info_cellline <- info_chemical %>% dplyr::filter(cell_line == j)
+    write.csv(info_cellline, file = paste("/Users/tili/Desktop/Cell_line_bulk_seq_202011/data/processed/info_",
+                                          i,"_",j,".csv", sep = ""))
+    cells_ordered <- re_order(info_cellline, cells)
+    write.csv(cells_ordered, file = paste("/Users/tili/Desktop/Cell_line_bulk_seq_202011/data/processed/cells_",
+                                          i,"_",j,".csv", sep = ""))
+  }
+}  
+
+for (i in chemical) {
+    info_chemical <- info %>% dplyr::filter(chemical == i | chemical == "DMSO") 
+    write.csv(info_chemical, file = paste("/Users/tili/Desktop/Cell_line_bulk_seq_202011/data/processed/info_",
+                                          i,".csv", sep = ""))
+    cells_ordered <- re_order(info_chemical, cells)
+    write.csv(cells_ordered, file = paste("/Users/tili/Desktop/Cell_line_bulk_seq_202011/data/processed/cells_",
+                                          i,".csv", sep = ""))
+  }
+```
+
+```{r construct dds object}
+dataset <- vector(mode = "list", length = 0)
+for (i in chemical) {
+  for (j in cell_line) {
+    files <- paste0("/Users/tili/Desktop/Cell_line_bulk_seq_202011/data/processed/info_",                        
+                   i,"_",j,".csv")
+    info <- read.csv(file = files, sep = ",")
+    files_cells <- paste0("/Users/tili/Desktop/Cell_line_bulk_seq_202011/data/processed/cells_",
+                                          i,"_",j,".csv")
+    cells <- read.delim(file = files_cells, sep = ",")
+    cells <- re_name(cells)
+    print(all(info$sample == colnames(cells)))
+    dataset[[paste0("dds_", i, "_", j)]] <- DESeqDataSetFromMatrix(countData=cells, colData = info, design = ~ group)
+  }
+} 
+
+dataset <- vector(mode = "list", length = 0)
+for (i in chemical) {
+    print(i)
+    files <- paste0("/Users/tili/Desktop/Cell_line_bulk_seq_202011/data/processed/info_",                        
+                   i,".csv")
+    info2 <- read.csv(file = files, sep = ",")
+    info2$groups <- as.factor(info2$groups)
+    info2$groups <- relevel(info2$groups, ref="KGN_DMSO")
+    files_cells <- paste0("/Users/tili/Desktop/Cell_line_bulk_seq_202011/data/processed/cells_",i,".csv")
+    cells2 <- read.delim(file = files_cells, sep = ",")
+    cells2 <- re_name(cells2)
+    print(all(info2$sample == colnames(cells2)))
+    dataset[[paste0("dds_", i)]] <- DESeqDataSetFromMatrix(countData=cells2, colData = info2, design = ~ groups)
+  }
+
+```
+
+
+## Plot library size / how many reads per sample
+
+```{r sequence depth check, fig.height = 15, fig.width = 15}
+
+#qc <- d %>% select(sample, read, group) %>% 
+#  group_by(group) %>% 
+#  summarise(sd(read))
+
+theme <- theme(text=element_text(size=9),
+               axis.text.x=element_text(color="black", angle = 90),
+               axis.text.y=element_text(color="black"),
+               axis.ticks=element_blank(),
+               strip.background = element_rect(colour=NA, fill=NA),
+               plot.background = element_blank(),
+               panel.grid.major = element_blank(),
+               panel.grid.minor = element_blank(),
+               panel.border = element_blank(),
+               axis.line.x = element_line(size=0.4),
+               axis.line.y = element_line(size=0.4),
+               panel.background = element_blank(),
+               legend.position = "bottom")
+
+qc_plot <- list()
+for (i in chemical) {
+  for (j in cell_line) {
+    files <- paste0("/Users/tili/Desktop/Cell_line_bulk_seq_202011/data/processed_salmon/info_",                        
+                   i,"_",j,".csv")
+    info <- read.csv(file = files, sep = ",")
+    info$group <- relevel(factor(info$group), ref = "DMSO")
+    gg <- info %>%
+          mutate(read = colSums(counts(dataset[[paste0("dds_", i, "_", j)]]))) %>% 
+            ggplot(aes(x=sample, y=read, fill = group)) + geom_bar(stat = "identity") + theme +
+            ggtitle("Samples Sequenced Read") + xlab("") + scale_fill_manual(values = c("#8dd3c7","#fb8072", "#bebada"))
+    qc_plot[[length(qc_plot) + 1]] <- gg
+  }
+} 
+cowplot::plot_grid(ncol = 3, nrow = 2, plotlist = qc_plot, labels = "AUTO") 
+
+```
+
+```{r low count filtering}
+
+dataset <- lapply(dataset, function(x) {
+  keep <- rowSums(counts(x)) >= 1
+  x <- x[keep,]
+})
+
+```
+
+## PCA plot using normalized data
+
+### CPM normalization using edgeR cpm function
+
+```{r PCA plot cpm, fig.height = 4, fig.width = 6}
+# check how many variance does each PC explain
+summary(pca)$importance[2,] * 100
+
+PCA_cpm <- list()
+for (i in chemical) {
+  for (j in cell_line) {
+    files <- paste0("/Users/tili/Desktop/Cell_line_bulk_seq_202011/data/processed_salmon/info_",                        
+                   i,"_",j,".csv")
+    info <- read.csv(file = files, sep = ",")
+    info$group <- relevel(factor(info$group), ref = "DMSO")
+    r <- edgeR::cpm(counts(dataset[[paste0("dds_", i, "_", j)]]), normalized.lib.sizes = T, log = T)
+    pca <- prcomp(t(r))
+    df <- cbind(info, pca$x)
+    contri <- round(summary(pca)$importance[2,] * 100, 2)
+    ggpca <- ggplot(df) + geom_point(aes(x=PC1, y = PC2, color = group), size = 3) + theme + 
+      ggtitle(paste0("PCA (cpm) - ", i, " ", j)) + scale_color_manual(values = c("#8dd3c7","#fb8072", "#bebada")) +
+      xlab(sprintf("PC1 (%s%%)", contri[1])) + ylab(sprintf("PC2 (%s%%)", contri[2]))
+    PCA_cpm[[length(PCA_cpm) + 1]] <- ggpca
+  }
+} 
+cowplot::plot_grid(ncol = 3, nrow = 2, plotlist = PCA_cpm, labels = "AUTO")
+
+```
+
+### vst normalization method in DESeq2
+
+```{r PCA plot vst, fig.height = 4, fig.width = 6}
+
+PCA_vst <- list()
+for (i in chemical) {
+  for (j in cell_line) {
+    r <- vst(dataset[[paste0("dds_", i, "_", j)]], blind = T, fitType='mean')
+    pca <- plotPCA(r, intgroup = c("group"), returnData = T) 
+    percentVar <- round(100 * attr(pca, "percentVar")) 
+    ggpca <- ggplot(pca, aes(PC1, PC2, color = group)) + 
+      ggtitle(paste0("PCA (vst) - ", i, " ", j)) + theme +
+      geom_point(size = 3) + xlab(paste0("PC1: ", percentVar[1], "% variance")) + 
+      ylab(paste0("PC2: ", percentVar[2], "% variance"))
+    PCA_vst[[length(PCA_vst) + 1]] <- ggpca
+  }
+} 
+cowplot::plot_grid(ncol = 3, nrow = 2, plotlist = PCA_vst) 
+
+```
+
+## Correlation between principal components and variables using all data
+
+```{r Swamp: correlation between principal components and variables}
+for (i in 1:ncol(info)) {
+  info[[i]] <- as.factor(info[[i]])
+}
+
+info1 <- info[,-c(1:4,6)] 
+primary <- prince(as.matrix(cells), info1, center = T)
+my_palette <- colorRampPalette(c("purple4", "white"))
+prince.plot(primary, label = colnames(primary$o), col = my_palette)
+
+cov <- read.csv2("/Users/tili/Desktop/Cell_line_bulk_seq_202011/data/processed/cells_KTZ_COV434.csv", sep = ",")
+cov <- re_name(cov)
+info <- read.csv2("/Users/tili/Desktop/Cell_line_bulk_seq_202011/data/processed/info_KTZ_COV434.csv", sep = ",")
+
+cov <- prince(as.matrix(cov), info1, center = T, top = 9)
+prince.plot(cov, label = colnames(cov$o), col = my_palette)
+
+prince.var.plot(as.matrix(cells), show.top = dim(as.matrix(cells))[2], imputeknn = F,
+                    center = T, npermute = 10)
+
+```
+
+
+## UMAP visualization using normalization method
+
+```{r UMAP plot, fig.height = 4, fig.width = 6}
+
+umap_vst <- list()
+for (i in chemical) {
+  for (j in cell_line) {
+    #r <- vst(dataset[[paste0("dds_", i, "_", j)]], blind = T, fitType='mean')
+    r <- edgeR::cpm(counts(dataset[[paste0("dds_", i, "_", j)]]), normalized.lib.sizes = T, log = T)
+    files <- paste0("/Users/tili/Desktop/Cell_line_bulk_seq_202011/data/processed/info_",                        
+                   i,"_",j,".csv")
+    info <- read.csv(file = files, sep = ",")
+    info$group <- relevel(factor(info$group), ref = "DMSO")
+    set.seed(1)
+    #normalized_counts <- assay(r) %>% t()
+    normalized_counts <- t(r)
+    umap_results <- umap::umap(normalized_counts, n_neighbors = 3) 
+    umap_plot_df <- data.frame(umap_results$layout) %>%
+    tibble::rownames_to_column("sample") %>% 
+    dplyr::inner_join(info, by = "sample")
+    gg <- ggplot(umap_plot_df, aes(x = X1, y = X2, color = group)) + geom_point(size = 3) + 
+      ggtitle(paste0("UMAP (vst) - ", i, " ", j)) + theme + scale_color_manual(values = c("#8dd3c7","#fb8072", "#bebada"))
+    umap_vst[[length(umap_vst) + 1]] <- gg
+  }
+} 
+cowplot::plot_grid(ncol = 3, nrow = 2, plotlist = umap_vst) 
+
+```
+
+## Heatmap: hierarchical clustering to view the similarities between technical replicates
+
+```{r Heatmap for hierarchical clustering, fig.height = 4, fig.width = 6}
+
+heatmap_vst <- list()
+for (i in chemical) {
+  for (j in cell_line) {
+    r <- vst(dataset[[paste0("dds_", i, "_", j)]], blind = T, fitType='mean')
+    r_cor <- cor(assay(r))
+    df <- as.data.frame(colData(dataset[[paste0("dds_", i, "_", j)]])[,c("cell_line","group")])
+    ggmap <- pheatmap(r_cor, scale = "column", show_rownames = F, annotation = df, fontsize = 15,
+         clustering_distance_cols = "manhattan", main = paste0("Heatmap (vst) - ", i, " ", j))
+    heatmap_vst[[length(heatmap_vst) + 1]] <- ggmap
+  }
+} 
+
+cowplot::plot_grid(ncol = 3, nrow = 2, plotlist = heatmap_vst) 
+
+pdf("/Users/tili/Desktop/Cell_line_bulk_seq_202011/results/figures/heatmap_vst_before_remove_outlier.pdf")
+for (i in 1:6) {
+   print(heatmap_vst[[i]])
+  grid::grid.newpage()
+}
+dev.off()
+
+gridExtra::grid.arrange(grobs = heatmap_vst)
+#gridExtra::grid.arrange(heatmap_vst)
+#grid.arrange(heatmap_vst, ncol = 3, nrow = 2)
+
+```
+
+```{r set reference group}
+
+for (i in chemical) {
+  for (j in cell_line) {
+    dataset[[paste0("dds_", i, "_", j)]]$group <- relevel(dataset[[paste0("dds_", i, "_", j)]]$group,ref = "DMSO")
+  }
+}
+
+for(i in 1 : length(dataset)){
+  print(names(dataset)[i])
+  dataset[[i]] <- DESeq(dataset[[i]])
+}
+
+```
+
+## DE analysis 
+
+```{r DE analysis}
+
+get_res <- function(x) {
+  res <- results(dataset[[paste0("dds_", i, "_", j)]], contrast = c("group", x, "DMSO"), 
+                 independentFiltering = T, pAdjustMethod = "fdr")
+  return(res)
+}
+
+check_sig <- function(res, pcutoff) {
+  res.sig <- res[which(res$padj < pcutoff),]
+  res.sig <- res.sig[order(res.sig$padj),]
+  summary(res.sig)
+  res.sig <- as.data.frame(res.sig)
+  return(res.sig)
+}
+
+comparison <- list()
+for (i in chemical) {
+  for (j in cell_line) {
+    dataset[[paste0("dds_", i, "_", j)]] <- DESeq(dataset[[paste0("dds_", i, "_", j)]])
+    files <- paste0("/Users/tili/Desktop/Cell_line_bulk_seq_202011/data/processed/info_",                        
+                   i,"_",j,".csv")
+    info <- read.csv(file = files, sep = ",")
+    info$group <- factor(info$group)
+    groups <- factor(levels(info$group)[levels(info$group) != "DMSO"]) 
+    for (k in groups) {
+      print(paste0("Differential expressed genes for"," ", k, " ", "vs DMSO", " ", i," ", j))
+      res <- get_res(k)
+      comparison[[paste0("res_", k, " ", i, " ", j)]] <- check_sig(res, 0.1) %>% as.data.frame() %>% 
+        mutate(geneid = rownames(.))
+    }
+  }
+} 
+
+
+for (i in chemical) {
+  for (j in cell_line) {
+    dataset[[paste0("dds_", i, "_", j)]] <- DESeq(dataset[[paste0("dds_", i, "_", j)]])
+    files <- paste0("/Users/tili/Desktop/Cell_line_bulk_seq_202011/data/processed/info_",                        
+                   i,"_",j,".csv")
+    info <- read.csv(file = files, sep = ",")
+    info$group <- factor(info$group)
+    groups <- factor(levels(info$group)[levels(info$group) != "DMSO"]) 
+    for (k in groups) {
+      print(paste0("Differential expressed genes for"," ", k, " ", "vs DMSO", " ", i," ", j))
+      res <- get_res(k)
+      comparison[[paste0("res_", k, " ", i, " ", j)]] <- res %>% as.data.frame() %>% 
+        mutate(geneid = rownames(.))
+      #assign(paste0("res_", k, " ", i, " ", j), comparison[[paste0("res_", k, " ", i, " ", j)]])
+    }
+  }
+} 
+
+```
+
+```{r DE analysis with full dataset}
+
+comparisonALL <- list()
+for(i in chemical){
+    files <- paste0("/Users/tili/Desktop/Cell_line_bulk_seq_202011/data/processed/info_", i,".csv")
+    info <- read.csv(file = files, sep = ",")
+    info$group <- as.factor(info$group)
+    info$groups <- as.factor(info$groups)
+    gro <- factor(levels(info$group)[levels(info$group) != "DMSO"])
+    for (j in cell_line){
+      for(k in gro){
+        p <- paste0(j,"_",k)
+          if (p %in% levels(info$groups)){
+            print(p)
+            comparisonALL[[p]] <- results(dataset[[paste0("dds_",i)]], 
+                                    contrast = c("groups", p, paste0(j,"_DMSO")), 
+                                    independentFiltering = T, pAdjustMethod = "fdr") %>% 
+                                  as.data.frame() %>% 
+                                  mutate(geneid = rownames(.))}
+    else { print(paste0(p," No result"))}       
+      }
+    }  
+}
+
+#significant DEG
+comparison05 <- list()
+for (i in 1:length(comparisonALL)) {
+  comparison05[[names(comparisonALL)[i]]] <- comparisonALL[[i]] %>% filter(padj<0.05)
+}
+
+comparison01 <- list()
+for (i in 1:length(comparisonALL)) {
+  comparison01[[names(comparisonALL)[i]]] <- comparisonALL[[i]] %>% filter(padj<0.1)
+}
+```
+
+
+dataset[[5]] <- DESeq(dataset[[5]])
+res <- results(dataset[[5]], contrast = c("exposure", "exposed", "control"), 
+                 independentFiltering = T, pAdjustMethod = "fdr")
+res.sig <- check_sig(res, 0.05)
+ktz_kgn <- get_id(res.sig)
+
+
+## get gene names from gene id
+
+```{r get gene names and save output}
+mart <- useEnsembl(biomart = "ensembl",dataset = "hsapiens_gene_ensembl")
+output <- getBM(attributes=c("ensembl_gene_id","external_gene_name","entrezgene_id","description"), mart = mart)
+
+get_id <- function(res.sig) {
+  res.sig$geneid <- rownames(res.sig)
+  final <- merge(res.sig, output, by.x = "geneid", by.y = "ensembl_gene_id", all.x = T, all.y = F)
+  return(final)
+}
+
+final <- lapply(comparison, function(x) {
+  x <- get_id(x)
+})
+
+final <- lapply(comparison01, function(x) {
+  x <- get_id(x)
+})
+
+final_shrunk <- lapply(shrunk_sig, function(x) {
+  x <- get_id(x)
+})
+
+all_shrunk <- lapply(shrunk, function(x) {
+  x <- get_id(x)
+})
+
+openxlsx::write.xlsx(final, "/Users/tili/Desktop/Cell_line_bulk_seq_202011/results/tables/not_stratified_DESeq2_x868_removed_sig01_20211201.xlsx")
+
+# Check if the analysis result is the same
+
+for (i in 1:12) { 
+   if (identical(kgn[i], final[i]) == T) {
+     print(paste0(names(kgn[i]), " is the same"))
+   } else {
+     print("Not the same")
+   }
+}
+```
+
+## Venn diagram
+```{r Venn diagram for DEGs}
+
+read_excel_allsheets <- function(filename, tibble = FALSE) {
+    sheets <- readxl::excel_sheets(filename)
+    x <- lapply(sheets, function(X) readxl::read_excel(filename, sheet = X))
+    if(!tibble) x <- lapply(x, as.data.frame)
+    names(x) <- sheets
+    x
+}
+
+kgn <- read_excel_allsheets("/Users/tili/Desktop/Cell_line_bulk_seq_202011/results/tables/DESeq2_x868_removed_sig01_20210912.xlsx")
+
+deg_df <- data.frame()
+for (i in names(kgn)){
+  deg <- kgn[[i]] %>% mutate(group = rep(i, nrow(kgn[[i]])))
+  deg_df <- rbind(deg_df, deg) 
+}
+
+set <- deg_df %>% select(external_gene_name, group) %>% 
+  mutate(cellline = str_sub(.$group, 19)) %>% 
+  mutate(treatment = str_sub(.$group, 5, 14)) %>% 
+  mutate(chemical = str_sub(.$group, 5, 7))
+
+write.csv(set, "/Users/tili/Desktop/Cell_line_bulk_seq_202011/results/tables/set sig01 for venn diagram.csv")
+
+set1 <- read.csv("/Users/tili/Desktop/Cell_line_bulk_seq_202011/results/tables/set sig01 for venn diagram.csv",
+                sep = ";", header = T) %>% na.omit()
+
+des <- set1 %>% filter(chemical == "DES") 
+ktz <- set1 %>% filter(chemical == "KTZ") 
+
+cov <- des %>% filter(cellline == "COV434")
+kgn <- des %>% filter(cellline == "KGN")
+primary <- des %>% filter(cellline == "Primary")
+
+des <- primary %>% filter(chemical == "DES") 
+ktz <- primary %>% filter(chemical == "KTZ") 
+
+mycol <- RColorBrewer::brewer.pal(6, "Pastel2")
+VennDiagram::venn.diagram(
+  x = list(cov$external_gene_name, kgn$external_gene_name, primary$external_gene_name),
+  category.names = c("COV434" , "KGN", "Primary"),
+  filename = 'Venn for DES three cell lines overlap sig01.png',
+  output=TRUE,
+  # Circles
+        lwd = 2,
+        col=c("#A58AFF","#53B400", "#00B6EB"),
+        fill = c(alpha("#A58AFF",1),alpha("#53B400",1), alpha("#00B6EB",1)),
+        scaled = T,
+        cex = 1.5,
+        fontface = "bold",
+        fontfamily = "sans",
+        # Set names
+        cat.cex = 0.8,
+        cat.fontface = "bold",
+        cat.default.pos = "outer",
+        cat.fontfamily = "sans",
+        cat.col =  c("#A58AFF","#53B400", "#00B6EB")
+)
+
+VennDiagram::venn.diagram(
+  x = list(na.omit(ktz_df$external_gene_name), na.omit(no_ktz_df$external_gene_name)),
+  category.names = c("Stratified" , "Not Stratified"),
+  filename = 'KTZ Venn for stratified and not stratified comparison.png',
+  output=TRUE,
+  main = "Venn for stratified and not stratified comparison",
+  # Circles
+        lwd = 2,
+        lty = 'blank',
+        fill = c(mycol[[1]], mycol[[4]]),
+        scaled = T,
+          # Numbers
+        cex = 1.5,
+        fontface = "bold",
+        fontfamily = "sans",
+        # Set names
+        cat.cex = 0.8,
+        cat.fontface = "bold",
+        cat.default.pos = "outer",
+        cat.fontfamily = "sans",
+        cat.col = c(mycol[[1]], mycol[[4]])
+)
+
+intersect(des$external_gene_name, ktz$external_gene_name)
+intersect(cov$external_gene_name, primary$external_gene_name)
+intersect(primary$external_gene_name, kgn$external_gene_name)
+
+Intersect <- function (x) {  
+  # Multiple set version of intersect
+  # x is a list
+  if (length(x) == 1) {
+    unlist(x)
+  } else if (length(x) == 2) {
+    intersect(x[[1]], x[[2]])
+  } else if (length(x) > 2){
+    intersect(x[[1]], Intersect(x[-1]))
+  }
+}
+
+```
+
+```{r heatmap for selected gene expression}
+cells_des <- read_excel_allsheets("/Users/tili/Desktop/Cell_line_bulk_seq_202011/results/tables/DESeq2_x868_removed_sig01_20210912.xlsx") 
+cells_ktz <- read_excel_allsheets("/Users/tili/Desktop/Cell_line_bulk_seq_202011/results/tables/DESeq2_x868_removed_sig01_20210912.xlsx")
+
+no_sep_des <- read_excel_allsheets("/Users/tili/Desktop/Cell_line_bulk_seq_202011/results/tables/not_stratified_DESeq2_x868_removed_sig01_20211201.xlsx") 
+no_sep_ktz <- read_excel_allsheets("/Users/tili/Desktop/Cell_line_bulk_seq_202011/results/tables/not_stratified_DESeq2_x868_removed_sig01_20211201.xlsx") 
+
+cells_des <- cells_des[1:6]
+cells_ktz <- cells_ktz[7:12]
+
+no_des <- no_sep_des[1:6]
+no_ktz <- no_sep_ktz[7:12]
+
+cell_line <- factor(info$cell_line)
+group <- factor(info$group)
+group <- relevel(group, ref = "DMSO")
+design <- model.matrix(~0 + cell_line + group)
+voom_norm <- limma::voom(cells, design, lib.size = colSums(cells))
+
+voom_cells <- voom_norm$E
+
+des_df <- data.frame()
+for (i in names(cells_des)){
+  deg <- cells_des[[i]] %>% mutate(group = rep(i, nrow(cells_des[[i]])))
+  des_df <- rbind(des_df, deg) 
+}
+des_df <- des_df %>% arrange(desc(.$padj)) %>% dplyr::distinct(.$geneid, .keep_all = T)
+
+no_des_df <- data.frame()
+for (i in names(no_des)){
+  deg <- no_des[[i]] %>% mutate(group = rep(i, nrow(no_des[[i]])))
+  no_des_df <- rbind(no_des_df, deg) 
+}
+no_des_df <- no_des_df %>% arrange(desc(.$padj)) %>% dplyr::distinct(.$geneid, .keep_all = T)
+
+ktz_df <- data.frame()
+for (j in names(cells_ktz)){
+  deg1 <- cells_ktz[[j]] %>% mutate(group = rep(j, nrow(cells_ktz[[j]])))
+  ktz_df <- rbind(ktz_df, deg1) 
+}
+ktz_df <- ktz_df %>% arrange(desc(.$padj)) %>% dplyr::distinct(.$geneid, .keep_all = T)
+
+no_ktz_df <- data.frame()
+for (i in names(no_ktz)){
+  deg <- no_ktz[[i]] %>% mutate(group = rep(i, nrow(no_ktz[[i]])))
+  no_ktz_df <- rbind(no_ktz_df, deg) 
+}
+no_ktz_df <- no_ktz_df %>% arrange(desc(.$padj)) %>% dplyr::distinct(.$geneid, .keep_all = T)
+
+normalized_counts <- counts(dds, normalized=T) %>% 
+  data.frame() %>%
+  tibble::rownames_to_column(var="gene") %>%
+  as_tibble() %>%
+  left_join(output, by=c("gene" = "ensembl_gene_id")) 
+
+normalized_counts <- list()
+for (i in chemical) {
+  normalized_counts[[i]] <- counts(dataset[[paste0("dds_",i)]], normalized=T) %>% 
+  data.frame() %>%
+  tibble::rownames_to_column(var="gene") %>%
+  as_tibble() %>%
+  left_join(output, by=c("gene" = "ensembl_gene_id")) 
+}
+
+normalized_counts <- voom_cells %>% 
+  data.frame() %>%
+  tibble::rownames_to_column(var="gene") %>%
+  as_tibble() %>%
+  left_join(output, by=c("gene" = "ensembl_gene_id"))
+
+id <- match(no_ktz_df$geneid, normalized_counts[["KTZ"]]$gene)
+ktz_count <- normalized_counts[["KTZ"]][id,] 
+
+id <- match(no_des_df$geneid, normalized_counts[["DES"]]$gene)
+des_count <- normalized_counts[["DES"]][id,] 
+
+genes <- ktz_count[,28]
+genes <- des_count[,29]
+
+scaleDES <- scale(t(des_count[,2:28]), scale = T, center = T) %>% t() %>% 
+  as.data.frame() %>% cbind(., genes) %>% 
+  cbind(., no_des_df$group) %>% 
+  na.omit()
+
+scaleKTZ <- scale(t(ktz_count[,2:27]), scale = T, center = T) %>% t() %>% 
+  as.data.frame() %>% cbind(., genes) %>% 
+  cbind(., no_ktz_df$group) %>% 
+  na.omit()
+
+#des <- read.csv("/Users/tili/Desktop/Cell_line_bulk_seq_202011/results/figures/des.csv", header = T, sep = ";")
+#ktz <- read.csv("/Users/tili/Desktop/Cell_line_bulk_seq_202011/results/figures/ktz.csv", header = T, sep = ";")
+
+
+order <- c("COV_P24_DMSO", "COV_P26_DMSO", "COV_P27_DMSO",
+                                             "COV_P24_DES_6", "COV_P26_DES_6", "COV_P27_DES_6",
+                                             "COV_P24_DES_10", "COV_P26_DES_10", "COV_P27_DES_10",
+                                             "KGN_P7_DMSO", "KGN_P8_DMSO", "KGN_P9_DMSO",
+                                             "KGN_P7_DES_6", "KGN_P8_DES_6", "KGN_P9_DES_6",
+                                             "KGN_P7_DES_10", "KGN_P8_DES_10", "KGN_P9_DES_10",
+                                             "X126_DMSO", "X236_DMSO", "X868_DMSO",
+                                             "X126_DES_6", "X236_DES_6", "X868_DES_6",
+                                             "X126_DES_10", "X236_DES_10", "X868_DES_10")
+
+genomic_idx <- match(order, colnames(scaleDES))
+genomic_idx
+scaleDES <- scaleDES[ ,genomic_idx]
+
+anno <- data.frame(cbind(order, c(rep("COV434",9), rep("KGN",9), rep("Primary",9)))) %>% 
+  'colnames<-' (c("Sample", "cell_line")) %>% 
+  'rownames<-' (.$Sample) %>% 
+  dplyr::select(cell_line) %>% 
+  mutate(group = (rep(c(rep("DMSO",3), rep("DES_6",3), rep("DES_10",3)),3)))
+
+pheatmap(scaleDES, cluster_rows = T, show_rownames = F, clustering_method = "complete",
+         cluster_cols = F, clustering_distance_rows = "correlation", annotation = anno, 
+         clustering_distance_cols = "correlation",
+         breaks = seq(-3, 4, length.out = 90))
+
+order1 <- c("COV_P24_DMSO", "COV_P26_DMSO", "COV_P27_DMSO",
+                                             "COV_P24_KTZ_5", "COV_P26_KTZ_5", "COV_P27_KTZ_5",
+                                             "COV_P24_KTZ_9", "COV_P26_KTZ_9", "COV_P27_KTZ_9",
+                                             "KGN_P7_DMSO", "KGN_P8_DMSO", "KGN_P9_DMSO",
+                                             "KGN_P7_KTZ_5", "KGN_P8_KTZ_5", "KGN_P9_KTZ_5",
+                                             "KGN_P7_KTZ_9", "KGN_P8_KTZ_9", "KGN_P9_KTZ_9",
+                                             "X126_DMSO", "X236_DMSO", "X868_DMSO",
+                                             "X126_KTZ_5", "X236_KTZ_5",
+                                             "X126_KTZ_9", "X236_KTZ_9", "X868_KTZ_9")
+
+genomic_idx <- match(order1, colnames(scaleKTZ))
+genomic_idx
+scaleKTZ <- scaleKTZ[ ,genomic_idx]
+
+anno1 <- data.frame(cbind(order1, c(rep("COV434",9), rep("KGN",9), rep("Primary",8)))) %>% 
+  'colnames<-' (c("Sample", "cell_line")) %>% 
+  'rownames<-' (.$Sample) %>% 
+  dplyr::select(cell_line) %>% 
+  mutate(group = c(rep(c(rep("DMSO",3), rep("KTZ_5",3), rep("KTZ_9",3)), 2), 
+                        c(rep("DMSO",3), rep("KTZ_5",2), rep("KTZ_9",3))))
+
+pheatmap(scaleKTZ[,1:26], cluster_rows = T, show_rownames = F, clustering_method = "complete",
+         cluster_cols = F, clustering_distance_rows = "correlation", annotation = anno1, 
+         clustering_distance_cols = "correlation")
+```
+
+
+
+## Volcano plot
+
+```{r}
+pval_threshold <- 0.05
+logfc_threshold <- 1
+
+volcano_vst <- list()
+for (i in 1:length(comparisonALL)) {
+      deseq.results <- comparisonALL[[i]]
+      deseq.results <- deseq.results %>% filter(!is.na(padj))
+      deseq.results$threshold <- as.factor(abs(deseq.results$log2FoldChange) >= logfc_threshold & 
+                             deseq.results$padj < pval_threshold)
+      deseq.results <- merge(deseq.results, output[,1:2], by.x = "geneid", by.y = "ensembl_gene_id", 
+                             all.x = T, all.y = F)
+      volcano_vst[[names(comparisonALL)[i]]] <- ggplot(data=deseq.results, 
+            aes(x=log2FoldChange, y=-log10(padj), colour=threshold)) +
+            geom_point(alpha=0.4, size=1.75) +
+            theme(legend.position = "none") +
+            theme_bw() + theme(legend.position="none") +
+            geom_vline(xintercept = logfc_threshold) +
+            geom_vline(xintercept = -logfc_threshold) +
+            geom_hline(yintercept = -log10(pval_threshold)) +
+            xlab("log2 fold change") + ylab("-log10 FDR") +
+            ggtitle(paste0(names(comparisonALL)[i], " DEGs")) +
+            ggrepel::geom_text_repel(aes(label=ifelse(padj < pval_threshold & abs(log2FoldChange) >= logfc_threshold,
+                                   external_gene_name, ''), max.overlaps=30))
+  }
+cowplot::plot_grid(ncol = 3,nrow = 4, plotlist = volcano_vst, labels = "AUTO")
+
+```
+
+
+## Shrunk results for downstream functional analysis
+
+```{r shrunk results}
+# coef input should be like: "group_DES_10.6M_vs_DMSO"
+# x input should be like: "DES_10-6M"
+
+get_shrunk <- function(x, coef, y) {
+  res_shrunk <- results(y, contrast = c("group", x, "DMSO"), 
+                           independentFiltering = T, pAdjustMethod = "fdr")
+  res_shrunk <- lfcShrink(y, coef = coef, type = "apeglm")
+  return(res_shrunk)
+}
+
+shrunk_sig <- list()
+for (i in chemical) {
+  for (j in cell_line) {
+    files <- paste0("/Users/tili/Desktop/Cell_line_bulk_seq_202011/data/processed/info_",                        
+                   i,"_",j,".csv")
+    info <- read.csv(file = files, sep = ",")
+    info$group <- factor(info$group)
+    groups <- factor(levels(info$group)[levels(info$group) != "DMSO"]) 
+    for (k in groups) {
+      print(paste0("Shrunk differential expressed genes for"," ", k, " ", "vs DMSO", " ", i," ", j))
+      coef <- paste0("group_", k %>% str_replace_all("-","."), "_vs_DMSO")
+      res <- get_shrunk(k, coef, dataset[[paste0("dds_", i, "_", j)]])
+      shrunk_sig[[paste0("res_", k, " ", i, " ", j)]] <- check_sig(res, 0.1) %>% as.data.frame() %>% 
+        mutate(geneid = rownames(.))
+      #assign(paste0("res_", k, " ", i, " ", j), comparison[[paste0("res_", k, " ", i, " ", j)]])
+    }
+  }
+} 
+
+shrunk <- list()
+for (i in chemical) {
+  for (j in cell_line) {
+    files <- paste0("/Users/tili/Desktop/Cell_line_bulk_seq_202011/data/processed/info_",                        
+                   i,"_",j,".csv")
+    info <- read.csv(file = files, sep = ",")
+    info$group <- factor(info$group)
+    groups <- factor(levels(info$group)[levels(info$group) != "DMSO"]) 
+    for (k in groups) {
+      print(paste0("Shrunk differential expressed genes for"," ", k, " ", "vs DMSO", " ", i," ", j))
+      coef <- paste0("group_", k %>% str_replace_all("-","."), "_vs_DMSO")
+      res <- get_shrunk(k, coef, dataset[[paste0("dds_", i, "_", j)]])
+      shrunk[[paste0("res_", k, " ", i, " ", j)]] <- res %>% as.data.frame() %>% 
+        mutate(geneid = rownames(.))
+      #assign(paste0("res_", k, " ", i, " ", j), comparison[[paste0("res_", k, " ", i, " ", j)]])
+    }
+  }
+} 
+
+
+```
+
+
+## Msigdb gene set analysis
+
+```{r Msigdb gene set analysis}
+# msigdbr_species()
+# msigdbr_collections()
+
+msigHs_c2 <- msigdbr(species = "Homo sapiens", category = "C2") %>%
+  dplyr::select(gs_name, entrez_gene) %>% 
+  as.data.frame()
+
+msigHs_h <- msigdbr(species = "Homo sapiens", category = "H") %>%
+  dplyr::select(gs_name, entrez_gene) %>% 
+  as.data.frame()
+
+genelist <- list()
+for (i in chemical) {
+  for (j in cell_line) {
+    files <- paste0("/Users/tili/Desktop/Cell_line_bulk_seq_202011/data/processed/info_",                        
+                   i,"_",j,".csv")
+    info <- read.csv(file = files, sep = ",")
+    info$group <- factor(info$group)
+    groups <- factor(levels(info$group)[levels(info$group) != "DMSO"]) 
+    for (k in groups) {
+    genelist[[paste0("gene_", k, " ", i, " ", j)]] <- all_shrunk[[paste0("res_", k, " ", i, " ", j)]]$log2FoldChange
+    names(genelist[[paste0("gene_", k, " ", i, " ", j)]]) <- as.character(all_shrunk[[paste0("res_", k, " ", i, " ", j)]]$entrezgene_id)
+    genelist[[paste0("gene_", k, " ", i, " ", j)]] <- sort(genelist[[paste0("gene_", k, " ", i, " ", j)]], 
+                                                           decreasing = T)
+    }
+  }
+}
+
+
+
+genelist <- list()
+for (i in chemical) {
+  for (j in cell_line) {
+    files <- paste0("/Users/tili/Desktop/Cell_line_bulk_seq_202011/data/processed/info_",                        
+                   i,"_",j,".csv")
+    info <- read.csv(file = files, sep = ",")
+    info$group <- factor(info$group)
+    groups <- factor(levels(info$group)[levels(info$group) != "DMSO"]) 
+    for (k in groups) {
+    genelist[[paste0("gene_", k, " ", i, " ", j)]] <- final[[paste0("res_", k, " ", i, " ", j)]]$stat 
+    names(genelist[[paste0("gene_", k, " ", i, " ", j)]]) <- as.character(final[[paste0("res_", k, " ", i, " ", j)]]$entrezgene_id)
+    genelist[[paste0("gene_", k, " ", i, " ", j)]] <- sort(genelist[[paste0("gene_", k, " ", i, " ", j)]], 
+                                                           decreasing = T) 
+    }
+  }
+}
+
+gse <- list()
+gse_df <- list()
+for (i in 1:length(all_shrunk)) {
+  print(paste0("Gene set analysis for"," ", names(all_shrunk)[i]," ", "vs DMSO"))
+  enrich <- enricher(gene = all_shrunk[[i]]$entrezgene_id, 
+                   TERM2GENE = msigHs_h,
+                   pvalueCutoff = 0.05,
+                   pAdjustMethod = "BH",
+                   minGSSize = 10,
+                   maxGSSize = 500)
+  gse[[names(all_shrunk)[i]]] <- enrich
+  gse_df[[names(all_shrunk)[i]]] <- enrich %>% as.data.frame()
+}
+
+
+gsea_hallmark <- list()
+gsea_hallmark_df <- list()
+for (i in 1:length(genelist)){
+print(names(genelist)[i])
+  gsea <- GSEA(gene = genelist[[i]], 
+                   TERM2GENE = msigHs_h,
+                   pvalueCutoff = 1,
+                   pAdjustMethod = "BH",
+                   minGSSize = 10,
+                   maxGSSize = 500)
+  gsea_hallmark[[names(genelist)[i]]] <- gsea
+  gsea_hallmark_df[[names(genelist)[i]]] <- gsea %>% as.data.frame() 
+}
+
+gsea_c2 <- list()
+gsea_c2_df <- list()
+for (i in 1:length(genelist)){
+print(names(genelist)[i])
+  gsea <- GSEA(gene = genelist[[i]], 
+                   TERM2GENE = msigHs_c2,
+                   pvalueCutoff = 1,
+                   pAdjustMethod = "BH",
+                   minGSSize = 10,
+                   maxGSSize = 500)
+  gsea_c2[[names(genelist)[i]]] <- gsea
+  gsea_c2_df[[names(genelist)[i]]] <- gsea %>% as.data.frame() 
+}
+
+for (i in 1:length(gsea_hallmark)) {
+  gsea_hallmark[i] <- setReadable(gsea_hallmark[[i]], OrgDb = org.Hs.eg.db, keyType="ENTREZID")
+}
+
+gsea_hallmark_sig <- list()
+for (i in 1:length(gsea_hallmark)) {
+    gsea_hallmark_sig[[names(gsea_hallmark)[i]]] <- gsea_hallmark_df[[i]] %>% filter(p.adjust<0.1) 
+    #gsea_hallmark_sig[["summary"]] <- rbind(gsea_hallmark_sig[["summary"]], gsea_hallmark_sig[[i]] %>%   
+     #                                       mutate(chemical=names(gsea_hallmark_sig)[i]))
+}
+
+
+gsea_c2_sig <- list()
+for (i in 1:length(gsea_c2)) {
+    gsea_c2_sig[[names(gsea_c2)[i]]] <- gsea_c2_df[[i]] %>% filter(p.adjust<0.1) 
+}
+
+openxlsx::write.xlsx(gsea_hallmark_sig, "/Users/tili/Desktop/Cell_line_bulk_seq_202011/results/tables/DESeq2_x868_removed_gsea_hallmark_abs_sig01_20210916.xlsx")
+
+
+```
+
+```{r GSEA plot}
+# gseaplot(edo, geneSetID = 1, by = "runningScore", title = edo$Description[1])
+# gseaplot(edo, geneSetID = 1, by = "preranked", title = edo$Description[1])
+gsea1 <- c("HALLMARK_PI3K_AKT_MTOR_SIGNALING","HALLMARK_ANDROGEN_RESPONSE",
+           "HALLMARK_TGF_BETA_SIGNALING","HALLMARK_MTORC1_SIGNALING")
+id1 <- match(gsea1, edo@result$ID)
+enrichplot::gseaplot2(edo, geneSetID = id1)
+gsea2 <- c("HALLMARK_CHOLESTEROL_HOMEOSTASIS","HALLMARK_WNT_BETA_CATENIN_SIGNALING",
+           "HALLMARK_FATTY_ACID_METABOLISM","HALLMARK_ESTROGEN_RESPONSE_EARLY")
+id2 <- match(gsea2, edo@result$ID)
+enrichplot::gseaplot2(edo, geneSetID = id2)
+
+############ gsea plot ################
+
+selected <- c("HALLMARK_ANDROGEN_RESPONSE", "HALLMARK_CHOLESTEROL_HOMEOSTASIS", "HALLMARK_KRAS_SIGNALING_UP", 
+              "HALLMARK_PI3K_AKT_MTOR_SIGNALING", "HALLMARK_ESTROGEN_RESPONSE_EARLY", "HALLMARK_TNFA_SIGNALING_VIA_NFKB",
+              "HALLMARK_FATTY_ACID_METABOLISM", "HALLMARK_MTORC1_SIGNALING", "HALLMARK_TGF_BETA_SIGNALING", 
+              "HALLMARK_ESTROGEN_RESPONSE_LATE", "HALLMARK_WNT_BETA_CATENIN_SIGNALING")
+
+kgn <- read_excel_allsheets("/Users/tili/Desktop/enricher_hallmark_sig.xlsx") %>% as.data.frame()
+colnames(kgn) <- c("ID", "Description", "GeneRatio", "BgRatio", "pvalue",
+      "p.adjust", "qvalue", "geneID", "Count", "chemical","che","cells" )
+kgn$che <- factor(kgn$che, levels = c("HCB", "DDE", "PCB_156", "PCB_180", "PFOS", "MIX", "Media"))
+
+kgn %>% 
+  ggplot(aes(x = cells, y = Description, col = p.adjust)) +
+    geom_point(aes(size = Count)) + facet_grid(~ kgn$che) + theme(text=element_text(size=15),
+               axis.text.x=element_text(color="black", angle = 90, vjust = 0.3, hjust = 0.3),
+               axis.text.y=element_text(color="black"),
+               axis.ticks.x.bottom=element_blank(),
+               #axis.ticks.length.x=unit(-.25, "cm"),
+               strip.background = element_rect(colour=NA, fill=NA),
+               plot.background = element_blank(),
+               #panel.grid.major = element_blank(),
+               #panel.grid.minor = element_blank(),
+               panel.spacing.x=unit(.5, "lines"),
+               panel.border = element_rect(color = "black", fill = NA, size = 1),
+               axis.line.x = element_line(size=0.4),
+               axis.line.y = element_line(size=0.4),
+               legend.key.size = unit(2, 'lines'),
+               panel.background = element_blank()
+) + xlab(" ") + ylab(" ") + scale_color_continuous(low = "purple", high = "green") 
+
+gsea_plotting <- data.frame()
+for (i in names(gsea_hallmark)){
+  gsea_df <- gsea_hallmark[[i]][selected,] %>% mutate(group = rep(i, 11))
+  gsea_plotting <- rbind(gsea_plotting, gsea_df) 
+}
+
+gsea_plotting %>% 
+  ggplot(aes(x = group, y = Description, col = NES)) +
+    geom_point(aes(size = pvalue)) + theme(text=element_text(size=14),
+               axis.text.x=element_text(color="black", angle = 90),
+               axis.text.y=element_text(color="black"),
+               axis.ticks=element_blank(),
+               strip.background = element_rect(colour=NA, fill=NA),
+               plot.background = element_blank(),
+               panel.grid.major = element_blank(),
+               panel.grid.minor = element_blank(),
+               panel.border = element_blank(),
+               axis.line.x = element_line(size=0.4),
+               axis.line.y = element_line(size=0.4),
+               panel.background = element_blank(),
+               legend.position = "right") + xlab(" ") + ylab(" ") +
+  scale_color_continuous(low = "purple", high = "green") 
+
+gsea_dotplot <- list()
+for (i in 1:length(gsea_hallmark)) {
+    gsea_dotplot[[names(gsea_hallmark)[i]]] <- dotplot(gsea_hallmark[[i]], showCategory = 10, color = "p.adjust",
+                                               orderBy = "p.adjust", decreasing = F) +
+      ggtitle(paste0("Dotplot - ", names(gsea_hallmark)[i])) + scale_color_continuous(low = "purple", high = "green") #+
+      #aes(shpae = Count > 3)
+}
+
+cowplot::plot_grid(nrow = 6, plotlist = gsea_dotplot)
+
+df <- gsea_dotplot[[7]]$data
+
+emapplot_GSEA_hallmark <- list()
+for (i in 1:length(gsea)) {
+   test <- enrichplot::pairwise_termsim(gsea[[i]])
+   emapplot_GSEA_hallmark[[names(gsea)[[i]]]]   <- emapplot(test, showCategory = 10)
+}
+
+cowplot::plot_grid(plotlist = emapplot_GSEA_hallmark[1:3])
+
+emapplot_GSEA <- list()
+for (i in 1:length(gsea)) {
+   test <- enrichplot::pairwise_termsim(gsea[[i]])
+   emapplot_GSEA[[names(gsea)[[i]]]] <- enrichplot::gseaplot2(test)
+}
+
+cowplot::plot_grid(plotlist = emapplot_GSEA[1:3])
+
+```
+
+## enrichKEGG and gseKEGG
+
+```{r}
+enrich_KEGG <- list()
+enrich_KEGG_df <- list()
+for (i in 1:length(all_shrunk)){
+print(names(all_shrunk)[i])
+  enrich <- enrichKEGG(gene = all_shrunk[[i]]$entrezgene_id, 
+                       organism = 'hsa',
+                       pvalueCutoff = 1)
+  enrich_KEGG[[names(all_shrunk)[i]]] <- enrich
+  enrich_KEGG_df[[names(all_shrunk)[i]]] <- enrich %>% as.data.frame() 
+}
+
+for (i in 1:length(enrich_KEGG)) {
+  enrich_KEGG[i] <- setReadable(enrich_KEGG[[i]], OrgDb = org.Hs.eg.db, keyType="ENTREZID")
+}
+
+
+enrich_KEGG_sig <- list()
+for (i in 1:length(enrich_KEGG)) {
+ enrich_KEGG_sig[[names(enrich_KEGG)[i]]] <- enrich_KEGG_df[[i]] %>% filter(p.adjust < 0.05)
+}
+
+gsea_KEGG <- list()
+gsea_KEGG_df <- list()
+for (i in 4:length(genelist)){
+print(names(genelist)[i])
+  gseaKEGG <- gseKEGG(geneList = genelist[[i]],
+               organism     = 'hsa',
+               minGSSize    = 10,
+               pvalueCutoff = 1,
+               verbose      = FALSE)
+  gsea_KEGG[[names(genelist)[i]]] <- gseaKEGG
+  gsea_KEGG_df[[names(genelist)[i]]] <- gsea_KEGG %>% as.data.frame() 
+}
+
+for (i in 1:length(gsea_KEGG)) {
+  gsea_KEGG[i] <- setReadable(gsea_KEGG[[i]], OrgDb = org.Hs.eg.db, keyType="ENTREZID")
+}
+
+########## Plot selected KEGG across groups ###########
+
+selected <- c("hsa04150", "hsa04114", "hsa01212", "hsa04931", "hsa04010", "hsa04310",
+              "hsa00100", "hsa04012", "hsa04914")
+
+selected <- c("hsa04350", "hsa04928", "hsa04150", "hsa04310", "hsa04022", "hsa04024",
+              "hsa04914", "hsa04114", "hsa04914", "hsa04919", "hsa00062", "hsa00071", 
+              "hsa01212", "hsa01040", "hsa01212", "hsa04024", "hsa04910", "hsa04020",
+              "hsa04010", "hsa04151")
+
+enrich_KEGG_plotting <- data.frame()
+for (i in names(enrich_KEGG)){
+  kegg_df <- enrich_KEGG[[i]][selected,] %>% mutate(group = rep(i, 20))
+  enrich_KEGG_plotting <- rbind(enrich_KEGG_plotting, kegg_df) 
+}
+
+
+plot_df <- enrich_KEGG_plotting %>% na.omit() %>% 
+  mutate(chemical = str_sub(.$group, 15)) %>% 
+  mutate(treatment = str_sub(.$group, 5, 14)) %>% 
+  filter(treatment != "DES_10-10M") %>% 
+  filter(treatment != "KTZ_10-9M ")
+
+ggplot(plot_df, aes(x = group, y = Description, col = pvalue)) +
+    geom_point(aes(size = 0.3)) + theme(text=element_text(size=14),
+               axis.text.x=element_text(color="black", angle = 90),
+               axis.text.y=element_text(color="black"),
+               axis.ticks=element_blank(),
+               strip.background = element_rect(colour=NA, fill=NA),
+               plot.background = element_blank(),
+               panel.grid.major = element_blank(),
+               panel.grid.minor = element_blank(),
+               panel.border = element_blank(),
+               axis.line.x = element_line(size=0.4),
+               axis.line.y = element_line(size=0.4),
+               panel.background = element_blank(),
+               legend.position = "right") + xlab(" ") + ylab(" ") +
+  scale_color_continuous(low = "purple", high = "green")
+
+openxlsx::write.xlsx( gsea_KEGG_df,
+                     "/Users/tili/Desktop/Cell_line_bulk_seq_202011/results/tables/DESeq2_x868_removed_gseaKEGG_sigDEGS01_20210916.xlsx")
+
+gse_KEGG <- list()
+gse_KEGG_df <- list()
+for(i in 1:length(geneList)){
+  print(names(geneList)[i])
+  edo <- gseKEGG(geneList = geneList[[i]], 
+                organism     = 'hsa',
+               nPerm        = 1000,
+               minGSSize    = 10,
+               pvalueCutoff = 1,
+               verbose      = FALSE)
+  gse_KEGG[[names(GeneList)[i]]] <- edo 
+  gse_KEGG_df[[names(GeneList)[i]]] <- edo %>% as.data.frame()
+}
+
+gse_KEGG_sig <- list()
+for (i in 1:length(gse_KEGG)) {
+  gse_KEGG_sig[[names(gse_KEGG)[i]]] <- gse_KEGG_df[[i]] %>% filter(p.adjust<0.05)
+  gse_KEGG_sig[["summary"]] <- rbind(gse_KEGG_sig[["summary"]], gse_KEGG_sig[[i]] %>%   
+                                      mutate(chemical=names(gse_KEGG_sig)[i]))
+}
+```
+
+## dotplot for GO and KEGG
+
+```{r}
+dotplot_enrich_GO <- list()
+for (i in 1:length(enrich_GO)) {
+ dotplot_enrich_GO[[names(enrich_GO)[[i]]]]  <- dotplot(enrich_GO[[i]], showCategory=10, orderBy="GeneRatio") + labs(title=names(enrich_GO)[[i]])
+}
+
+dotplot_enrich_GO_comb <- list()
+for (i in 1:length(enrich_GO_comb)) {
+ dotplot_enrich_GO_comb[[names(enrich_GO_comb)[[i]]]]  <- dotplot(enrich_GO_comb[[i]], showCategory=10, orderBy="GeneRatio") + labs(title=names(enrich_GO_comb)[[i]])
+}
+
+dotplot_gse_GO <- list()
+for (i in 1:length(gse_GO)) {
+ dotplot_gse_GO[[names(gse_GO)[[i]]]]  <- dotplot(gse_GO[[i]], showCategory=10, orderBy="GeneRatio", split=".sign") + facet_grid(.~.sign) + labs(title=names(gse_GO)[[i]])
+}
+
+dotplot_enrich_KEGG <- list()
+for (i in 1:length(enrich_KEGG)) {
+ dotplot_enrich_KEGG[[names(enrich_KEGG)[[i]]]]  <- dotplot(enrich_KEGG[[i]], showCateKEGGry=10, orderBy="GeneRatio") + labs(title=names(enrich_KEGG)[[i]])
+}
+
+dotplot_enrich_KEGG_comb <- list()
+for (i in 1:length(enrich_KEGG_comb)) {
+ dotplot_enrich_KEGG_comb[[names(enrich_KEGG_comb)[[i]]]]  <- dotplot(enrich_KEGG_comb[[i]], showCateKEGGry=10, orderBy="GeneRatio") + labs(title=names(enrich_KEGG_comb)[[i]])
+}
+
+dotplot_gse_KEGG <- list()
+for (i in 1:length(gse_KEGG)) {
+ dotplot_gse_KEGG[[names(gse_KEGG)[[i]]]]  <- dotplot(gse_KEGG[[i]], showCateKEGGry=10, orderBy="GeneRatio", split=".sign") + facet_grid(.~.sign) + labs(title=names(gse_KEGG)[[i]])
+}
+```
+
+```{r Visualized KEGG pathway}
+hsa04914 <- pathview(gene.data  = genelist[[7]],
+                     pathway.id = "hsa04914",
+                     species    = "hsa",
+                     limit      = list(gene=max(abs(genelist[[7]])), cpd=1))
+
+browseKEGG(enrich_KEGG_sig[[7]], 'hsa04914')
+
+```
+
+
+```{r GO analysis}
+plan("multisession", workers = 4)
+ego <- list()
+for (i in 1:length(all_shrunk)) {
+    print(paste0("GO analysis for"," ", names(all_shrunk)[i]))
+    ego[[names(final_shrunk)[i]]] <- enrichGO(gene = final_shrunk[[i]]$entrezgene_id, 
+                                                         #keyType = "ENSEMBL", 
+                                                         #universe = msigHs_h$entrez_gene,
+                                                         universe = all_shrunk[[i]]$entrezgene_id,
+                                                         OrgDb = org.Hs.eg.db, ont = "ALL", 
+                                                         pAdjustMethod = "BH", 
+                                                         qvalueCutoff = 0.05, readable = TRUE)
+}
+
+#cluster_summary <- data.frame(ego@result)
+#knitr::kable(cluster_summary)
+
+```
+
+## Plot GO analysis results
+
+```{r plot GO analysis results}
+
+ego_dotplot <- list()
+for (i in 1: length(ego)) {
+    ego_dotplot[[names(ego)[i]]] <- dotplot(ego[[i]], showCategory = 50) +
+      ggtitle(paste0("Dotplot - ",names(ego)[i])) + scale_color_continuous(low = "purple", high = "green") +
+      aes(shpae = Count > 3)
+}
+
+
+setwd("/Users/tili/Desktop/Cell_line_bulk_seq_202011/results/figures")
+pdf("GO_dotplot.pdf")
+for (i in c(1,3,4,5,6,9,10,11,12)) {
+  print(ego_dotplot[[i]])
+  #grid::grid.newpage()
+}
+dev.off()
+
+x <- enrichplot::pairwise_termsim(ego[[1]])
+emapplot(x, showCategory = 40)
+
+foldchange <- final_shrunk$log2FoldChange
+names(foldchange) <- final_shrunk$external_gene_name
+cnetplot(ego, categorySize="pvalue", showCategory = 5, foldChange=foldchange, vertex.label.font=6)
+```
+
+```{r Session info}
+sessionInfo()
+```
