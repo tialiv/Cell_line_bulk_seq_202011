@@ -24,11 +24,10 @@ Rows in the raw count matrix is renamed using geneID. Chemicals and cell lines a
 
 ```{r Load dependencies}
 suppressMessages(library(dplyr))
-suppressMessages(library(tximport))
-suppressMessages(library(S4Vectors))
-suppressMessages(library(readr))
-suppressMessages(library(EnsDb.Hsapiens.v86))
-suppressMessages(library(ensembldb))
+#suppressMessages(library(tximport))
+#suppressMessages(library(S4Vectors))
+#suppressMessages(library(EnsDb.Hsapiens.v86))
+#suppressMessages(library(ensembldb))
 suppressMessages(library(DESeq2))
 suppressMessages(library(ggplot2))
 suppressMessages(library(pheatmap))
@@ -49,6 +48,7 @@ suppressMessages(library(patchwork))
 suppressMessages(library(VennDiagram))
 suppressMessages(library(GSEABase))
 suppressMessages(library(GSVA))
+#suppressMessages(library(RcisTarget))
 ```
 
 ## Raw data input
@@ -465,6 +465,7 @@ cov_k <- ktz %>% filter(cellline == "COV434") %>% na.omit()
 kgn_k <- ktz %>% filter(cellline == "KGN") %>% na.omit()
 primary_k <- ktz %>% filter(cellline == "Primary") %>% na.omit()
 
+cols <- c("#A58AFF","#53B400", "#00B6EB")
 VennDiagram::venn.diagram(
   x = list(cov_d$external_gene_name, kgn_d$external_gene_name, primary_d$external_gene_name),
   category.names = c("COV434" , "KGN", "Primary"),
@@ -506,6 +507,13 @@ VennDiagram::venn.diagram(
         cat.fontfamily = "sans",
         cat.col =  c("#A58AFF","#53B400", "#00B6EB")
 )
+
+ce <- c("COV434" , "KGN", "Primary")
+plot(NULL ,xaxt='n',yaxt='n',bty='n',ylab='',xlab='', xlim=0:1, ylim=0:1)
+leg <- legend("topleft", legend =ce, pch=16, pt.cex=2, cex=1.5, bty='n',
+    col = cols)
+
+venn_d <- readPNG("Venn for DES three cell lines overlap sig01.png")
 
 ```
 
@@ -697,8 +705,9 @@ for(i in 1:length(final_shrunk)){
   GeneList[[names(final_shrunk)[i]]] <- sort(GeneList[[names(final_shrunk)[i]]], decreasing = T)
 }
 
-
+save(shrunk, shrunk_sig, GeneList, file = "/Users/tili/Desktop/Cell_line_bulk_seq_202011/results/shrunk.Rdata")
 ```
+
 
 ## Msigdb gene set analysis
 
@@ -837,21 +846,14 @@ for (i in 1:length(enrich_KEGG)) {
   enrich_KEGG[i] <- setReadable(enrich_KEGG[[i]], OrgDb = org.Hs.eg.db, keyType="ENTREZID")
 }
 
+openxlsx::write.xlsx(enrich_KEGG, file = "/Users/tili/Desktop/Cell_line_bulk_seq_202011/results/tables/DESeq2_x868_removed_enrich_KEGG.xlsx")
 
 enrich_KEGG_sig <- list()
 for (i in 1:length(enrich_KEGG)) {
  enrich_KEGG_sig[[names(enrich_KEGG)[i]]] <- enrich_KEGG_df[[i]] %>% filter(p.adjust < 0.05)
 }
 
-########## Plot selected KEGG across groups ###########
-
-#selected <- c("hsa04150", "hsa04114", "hsa01212", "hsa04931", "hsa04010", "hsa04310",
-#              "hsa00100", "hsa04012", "hsa04914")
-
-selected <- c("hsa04350", "hsa04928", "hsa04150", "hsa04310", "hsa04022", "hsa04024",
-              "hsa04914", "hsa04114", "hsa04914", "hsa04919", "hsa00062", "hsa00071", 
-              "hsa01212", "hsa01040", "hsa01212", "hsa04024", "hsa04910", "hsa04020",
-              "hsa04010", "hsa04151")
+openxlsx::write.xlsx(enrich_KEGG_sig, file = "/Users/tili/Desktop/Cell_line_bulk_seq_202011/results/tables/DESeq2_x868_removed_enrich_KEGG_sig01.xlsx")
 
 gse_KEGG <- list()
 gse_KEGG_df <- list()
@@ -869,10 +871,11 @@ for(i in 1:length(GeneList)){
 
 gse_KEGG_sig <- list()
 for (i in 1:length(gse_KEGG)) {
-  gse_KEGG_sig[[names(gse_KEGG)[i]]] <- gse_KEGG_df[[i]] %>% filter(p.adjust<0.05)
-  gse_KEGG_sig[["summary"]] <- rbind(gse_KEGG_sig[["summary"]], gse_KEGG_sig[[i]] %>%   
-                                      mutate(chemical=names(gse_KEGG_sig)[i]))
+  gse_KEGG_sig[[names(gse_KEGG)[i]]] <- gse_KEGG_df[[i]] %>% filter(p.adjust<0.1)
 }
+
+openxlsx::write.xlsx(gse_KEGG, file = "/Users/tili/Desktop/Cell_line_bulk_seq_202011/results/tables/DESeq2_x868_removed_gse_KEGG.xlsx")
+
 ```
 
 ## GO analysis
@@ -922,7 +925,59 @@ for (i in 1:length(gse_KEGG)) {
  dotplot_gse_KEGG[[names(gse_KEGG)[[i]]]]  <- dotplot(gse_KEGG[[i]], showCategory=10, orderBy="GeneRatio", split=".sign") + facet_grid(.~.sign) + labs(title=names(gse_KEGG)[[i]])
 }
 wrap_plots(ncol = 2, dotplot_gse_KEGG) + plot_annotation(tag_levels = "A")
+
+selected <- c("hsa04064", "hsa04915", "hsa04115", "hsa04010", "hsa04914", "hsa04935",
+              "hsa04064", "hsa04912", "hsa04370", "hsa00062", "hsa04919", "hsa04918", 
+              "hsa04911", "hsa04931", "hsa04668", "hsa04151", "hsa00980", "hsa04928",
+              "hsa04979", "hsa03320", "hsa04152", "hsa04010", "hsa04114")
+
+kegg_df <- data.frame()
+for (i in names(gse_KEGG_df)){
+  deg <- gse_KEGG_df[[i]] %>% mutate(group = rep(i, nrow(gse_KEGG_df[[i]])))
+  kegg_df <- rbind(kegg_df, deg) 
+}
+
+kegg <- data.frame()
+for (i in selected) {
+  temp <- kegg_df[str_detect(rownames(kegg_df), i),]
+  kegg <- rbind(kegg, temp)
+}
+
+theme <- theme(text=element_text(size=25),
+               axis.text.x=element_text(color="black", angle = 90, vjust = 0.3, hjust = 0.3),
+               axis.text.y=element_text(color="black"),
+               axis.ticks.x.bottom=element_blank(),
+               #axis.ticks.length.x=unit(-.25, "cm"),
+               strip.background = element_rect(colour=NA, fill=NA),
+               plot.background = element_blank(),
+               #panel.grid.major = element_blank(),
+               #panel.grid.minor = element_blank(),
+               panel.spacing.x=unit(.5, "lines"),
+               panel.border = element_rect(color = "black", fill = NA, size = 1),
+               axis.line.x = element_line(size=0.4),
+               axis.line.y = element_line(size=0.4),
+               legend.key.size = unit(2, 'lines'),
+               panel.background = element_blank()
+)
+
+d1 <- kegg %>% unique() %>% 
+  group_by(group) %>% 
+  arrange(desc(NES), .by_group = T) %>% 
+  mutate(chemical = ifelse(str_detect(group, "DES"), "DES", "KTZ"))
+
+des <- d1 %>% filter(chemical == "DES") %>% 
+  ggplot(aes(y = reorder(Description, -NES), x = NES)) + geom_bar(stat = "identity", aes(y = reorder(Description, -NES), fill = pvalue)) + theme +
+  facet_grid(~group) + scale_fill_continuous(low = "#a1d99b", high = "#e34a33") + ylab("") + ggtitle("DES")
+
+ktz <- d1 %>% filter(chemical == "KTZ") %>% 
+  ggplot(aes(y = reorder(Description, -NES), x = NES)) + geom_bar(stat = "identity", aes(y = reorder(Description, -NES), fill = pvalue)) + theme +
+  facet_grid(~group) + scale_fill_continuous(low = "#a1d99b", high = "#e34a33") + ylab("") + ggtitle("KTZ")
+
+des / ktz + plot_annotation(tag_levels = "A")
+
 ```
+
+# Visualize KEGG
 
 ```{r Visualized KEGG pathway}
 hsa04914 <- pathview(gene.data  = GeneList[[7]],
@@ -1017,6 +1072,27 @@ openxlsx::write.xlsx(comparison,
 
 ```
 
+## Enrichment of transcriptional factor
+```{r TF enrichment}
+
+# Import motif database
+motifRankings <- importRankings("/Users/tili/Desktop/Cell_line_bulk_seq_202011/code/hg19-tss-centered-10kb-7species.mc9nr.feather")
+
+# Set gene lists to analyze
+geneList <-list()
+for (i in 1: length(kgn)) {
+  tmp <- kgn[[i]]
+  geneList[[names(kgn[i])]] <- tmp$external_gene_name
+}
+
+data(motifAnnotations_hgnc)
+
+# motif enrichment analysis
+motif <- cisTarget(geneList, motifRankings = motifRankings, motifAnnot = motifAnnotations_hgnc)
+motif_wlogo <- addLogo(motif)
+
+openxlsx::write.xlsx(motif_wlogo, file = "/Users/tili/Desktop/Cell_line_bulk_seq_202011/results/tables/motif_enrichment_with logo_20220320.xlsx")
+```
 
 
 ```{r Session info}
