@@ -1076,22 +1076,22 @@ openxlsx::write.xlsx(comparison,
 ```{r TF enrichment}
 
 # Import motif database
-motifRankings <- importRankings("/Users/tili/Desktop/Cell_line_bulk_seq_202011/code/hg19-tss-centered-10kb-7species.mc9nr.feather")
+#motifRankings <- importRankings("/Users/tili/Desktop/Cell_line_bulk_seq_202011/code/hg19-tss-centered-10kb-7species.mc9nr.feather")
 
 # Set gene lists to analyze
-geneList <-list()
-for (i in 1: length(kgn)) {
-  tmp <- kgn[[i]]
-  geneList[[names(kgn[i])]] <- tmp$external_gene_name
-}
+#geneList <-list()
+#for (i in 1: length(kgn)) {
+#  tmp <- kgn[[i]]
+#  geneList[[names(kgn[i])]] <- tmp$external_gene_name
+#}
 
-data(motifAnnotations_hgnc)
+#data(motifAnnotations_hgnc)
 
 # motif enrichment analysis
-motif <- cisTarget(geneList, motifRankings = motifRankings, motifAnnot = motifAnnotations_hgnc)
-motif_wlogo <- addLogo(motif)
+#motif <- cisTarget(geneList, motifRankings = motifRankings, motifAnnot = motifAnnotations_hgnc)
+#motif_wlogo <- addLogo(motif)
 
-openxlsx::write.xlsx(motif_wlogo, file = "/Users/tili/Desktop/Cell_line_bulk_seq_202011/results/tables/motif_enrichment_with logo_20220320.xlsx")
+#openxlsx::write.xlsx(motif_wlogo, file = "/Users/tili/Desktop/Cell_line_bulk_seq_202011/results/tables/motif_enrichment_with logo_20220320.xlsx")
 ```
 
 
