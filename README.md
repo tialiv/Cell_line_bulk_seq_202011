@@ -20,5 +20,7 @@ rstudio &
 # Deactivate the environment when finishing analysis
 conda deactivate
 
+# If package DOSE and clusterprofiler cannot be loaded and the problem is that DO.db needs to be reinstalled, activate the environment and run the following code
+conda install -c bioconda bioconductor-do.db
 
 ```
