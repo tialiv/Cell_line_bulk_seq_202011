@@ -16,7 +16,7 @@ dependencies:
 - bioconductor-biomaRt=2.46.3
 - r-umap=0.2.7.0
 - r-RColorBrewer=1.1_2
-- r-dplyr=1.0.7
+- r-dplyr=1.0.9
 - r-ggplot2=3.3.5
 - r-BiocManager=1.30.16
 - python=3.10.1
