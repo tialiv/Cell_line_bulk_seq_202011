@@ -243,14 +243,14 @@ for (i in 1:length(des)){
 dev.off()
 
 
-d2 <- plotCounts(dataset[["dds_KTZ"]], gene="ENSG00000140009", intgroup=c("group", "cell_line"), normalized = T,
+d2 <- plotCounts(dataset[["dds_DES"]], gene="ENSG00000163626", intgroup=c("group", "cell_line"), normalized = T,
                   returnData=TRUE) 
-  d2$group <- factor(d2$group, levels = c("DMSO", "DES_10-10M", "DES_10-6M"))
+d2$group <- factor(d2$group, levels = c("DMSO", "DES_10-10M", "DES_10-6M"))
 p5 <-  ggplot(d2, aes(x=group, y=count, fill = group)) + 
     geom_boxplot()  + 
     facet_grid(~ cell_line) +
     geom_point(size=2, alpha = 0.5) + xlab("") + ylab("normalized count") +
-    theme + ggtitle("ESR1") +
+    theme + #ggtitle("ESR1") +
     scale_fill_manual(values=c("#f0f0f0", "#b3cde3","#88419d"))
 
 # Plot KTZ group genes
