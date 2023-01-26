@@ -56,7 +56,7 @@ suppressMessages(library(GSVA))
 ### Data from STAR alignment
 
 ```{r initial data input}
-cells <- read.delim(file = "/Users/tili/Desktop/Cell_line_bulk_seq_202011/data/subreadCounts.txt")
+cells <- read.delim(file = "/Users/tianyi.li.2/Desktop/Cell_line_bulk_seq_202011/data/subreadCounts.txt")
 info <- read.csv(file = "/Users/tili/Desktop/Cell_line_bulk_seq_202011/data/info.csv", header = T, sep = ";")
 cells[is.na(cells)] <- 0 
 
@@ -363,7 +363,7 @@ for (i in 1:length(comparisonALL)) {
 }
 
 save(dataset, comparison01, comparisonALL, 
-     file = "/Users/tili/Desktop/Cell_line_bulk_seq_202011/results/DESeq2_X868_5_removed.Rdata")
+     file = "/Users/tili/Desktop/Cell_line_bulk_seq_202011/results/DESeq2_patient3_5_removed.Rdata")
 ```
 
 ### DE results: control vs exposed
@@ -399,7 +399,7 @@ for (i in 1:length(comparisonALL)) {
 }
 
 save(dataset, comparison01, comparisonALL, 
-     file = "/Users/tili/Desktop/Cell_line_bulk_seq_202011/results/DESeq2_X868_5_removed_control_vs_exposed.Rdata")
+     file = "/Users/tili/Desktop/Cell_line_bulk_seq_202011/results/DESeq2_patient3_5_removed_control_vs_exposed.Rdata")
 ```
 
 ## get gene names from gene id
@@ -409,7 +409,7 @@ save(dataset, comparison01, comparisonALL,
 #output <- getBM(attributes=c("ensembl_gene_id","external_gene_name","entrezgene_id","description"), mart = ensembl)
 output <- read.csv2(file = "/Users/tili/Desktop/Cell_line_bulk_seq_202011/results/mart.csv", sep = ",")
 
-load(file = "/Users/tili/Desktop/Cell_line_bulk_seq_202011/results/DESeq2_X868_5_removed.Rdata")
+load(file = "/Users/tili/Desktop/Cell_line_bulk_seq_202011/results/DESeq2_patient3_5_removed.Rdata")
 
 get_id <- function(res.sig) {
   res.sig$geneid <- rownames(res.sig)
@@ -425,7 +425,7 @@ final <- lapply(comparison01, function(x) {
   x <- get_id(x)
 })
 
-openxlsx::write.xlsx(final, "/Users/tili/Desktop/Cell_line_bulk_seq_202011/results/tables/not_stratified_DESeq2_x868_removed_control_vs_exposed_sig01_20220110.xlsx")
+openxlsx::write.xlsx(final, "/Users/tili/Desktop/Cell_line_bulk_seq_202011/results/tables/not_stratified_DESeq2_patient3_removed_control_vs_exposed_sig01_20220110.xlsx")
 
 ```
 
@@ -441,7 +441,7 @@ read_excel_allsheets <- function(filename, tibble = FALSE) {
     x
 }
 
-kgn <- read_excel_allsheets("/Users/tili/Desktop/Cell_line_bulk_seq_202011/results/tables/not_stratified_DESeq2_x868_removed_sig01_20220110.xlsx")
+kgn <- read_excel_allsheets("/Users/tili/Desktop/Cell_line_bulk_seq_202011/results/tables/not_stratified_DESeq2_patient3_removed_sig01_20220110.xlsx")
 
 deg_df <- data.frame()
 for (i in names(kgn)){
@@ -559,9 +559,9 @@ order <- c("COV_P24_DMSO", "COV_P26_DMSO", "COV_P27_DMSO",
                                              "KGN_P7_DMSO", "KGN_P8_DMSO", "KGN_P9_DMSO",
                                              "KGN_P7_DES_6", "KGN_P8_DES_6", "KGN_P9_DES_6",
                                              "KGN_P7_DES_10", "KGN_P8_DES_10", "KGN_P9_DES_10",
-                                             "X126_DMSO", "X236_DMSO", "X868_DMSO",
-                                             "X126_DES_6", "X236_DES_6", "X868_DES_6",
-                                             "X126_DES_10", "X236_DES_10", "X868_DES_10")
+                                             "patient1_DMSO", "patient2_DMSO", "patient3_DMSO",
+                                             "patient1_DES_6", "patient2_DES_6", "patient3_DES_6",
+                                             "patient1_DES_10", "patient2_DES_10", "patient3_DES_10")
 
 genomic_idx <- match(order, colnames(scaleDES))
 genomic_idx
@@ -583,9 +583,9 @@ order1 <- c("COV_P24_DMSO", "COV_P26_DMSO", "COV_P27_DMSO",
                                              "KGN_P7_DMSO", "KGN_P8_DMSO", "KGN_P9_DMSO",
                                              "KGN_P7_KTZ_5", "KGN_P8_KTZ_5", "KGN_P9_KTZ_5",
                                              "KGN_P7_KTZ_9", "KGN_P8_KTZ_9", "KGN_P9_KTZ_9",
-                                             "X126_DMSO", "X236_DMSO", "X868_DMSO",
-                                             "X126_KTZ_5", "X236_KTZ_5",
-                                             "X126_KTZ_9", "X236_KTZ_9", "X868_KTZ_9")
+                                             "patient1_DMSO", "patient2_DMSO", "patient3_DMSO",
+                                             "patient1_KTZ_5", "patient2_KTZ_5",
+                                             "patient1_KTZ_9", "patient2_KTZ_9", "patient3_KTZ_9")
 
 genomic_idx <- match(order1, colnames(scaleKTZ))
 genomic_idx
@@ -736,7 +736,7 @@ for (i in 1:length(all_shrunk)) {
 }
 
 
-openxlsx::write.xlsx(gse, "/Users/tili/Desktop/Cell_line_bulk_seq_202011/results/tables/DESeq2_x868_removed_enricher_hallmark_20220110.xlsx")
+openxlsx::write.xlsx(gse, "/Users/tili/Desktop/Cell_line_bulk_seq_202011/results/tables/DESeq2_patient3_removed_enricher_hallmark_20220110.xlsx")
 
 gsea_hallmark <- list()
 gsea_hallmark_df <- list()
@@ -770,7 +770,7 @@ for (i in 1:length(gse)) {
   gse[[i]] <- setReadable(gse[[i]], OrgDb = org.Hs.eg.db, keyType="ENTREZID")
 }
 
-openxlsx::write.xlsx(gse, "/Users/tili/Desktop/Cell_line_bulk_seq_202011/results/tables/DESeq2_x868_removed_enricher_hallmark_20220110.xlsx")
+openxlsx::write.xlsx(gse, "/Users/tili/Desktop/Cell_line_bulk_seq_202011/results/tables/DESeq2_patient3_removed_enricher_hallmark_20220110.xlsx")
 
 for (i in 1:length(gsea_hallmark)) {
   gsea_hallmark[i] <- setReadable(gsea_hallmark[[i]], OrgDb = org.Hs.eg.db, keyType="ENTREZID")
@@ -787,7 +787,7 @@ for (i in 1:length(gsea_c2)) {
     gsea_c2_sig[[names(gsea_c2)[i]]] <- gsea_c2_df[[i]] %>% filter(p.adjust<0.1) 
 }
 
-openxlsx::write.xlsx(gsea_hallmark, "/Users/tili/Desktop/Cell_line_bulk_seq_202011/results/tables/DESeq2_x868_removed_gsea_hallmark_20220110.xlsx")
+openxlsx::write.xlsx(gsea_hallmark, "/Users/tili/Desktop/Cell_line_bulk_seq_202011/results/tables/DESeq2_patient3_removed_gsea_hallmark_20220110.xlsx")
 
 
 ```
@@ -846,14 +846,14 @@ for (i in 1:length(enrich_KEGG)) {
   enrich_KEGG[i] <- setReadable(enrich_KEGG[[i]], OrgDb = org.Hs.eg.db, keyType="ENTREZID")
 }
 
-openxlsx::write.xlsx(enrich_KEGG, file = "/Users/tili/Desktop/Cell_line_bulk_seq_202011/results/tables/DESeq2_x868_removed_enrich_KEGG.xlsx")
+openxlsx::write.xlsx(enrich_KEGG, file = "/Users/tili/Desktop/Cell_line_bulk_seq_202011/results/tables/DESeq2_patient3_removed_enrich_KEGG.xlsx")
 
 enrich_KEGG_sig <- list()
 for (i in 1:length(enrich_KEGG)) {
  enrich_KEGG_sig[[names(enrich_KEGG)[i]]] <- enrich_KEGG_df[[i]] %>% filter(p.adjust < 0.05)
 }
 
-openxlsx::write.xlsx(enrich_KEGG_sig, file = "/Users/tili/Desktop/Cell_line_bulk_seq_202011/results/tables/DESeq2_x868_removed_enrich_KEGG_sig01.xlsx")
+openxlsx::write.xlsx(enrich_KEGG_sig, file = "/Users/tili/Desktop/Cell_line_bulk_seq_202011/results/tables/DESeq2_patient3_removed_enrich_KEGG_sig01.xlsx")
 
 gse_KEGG <- list()
 gse_KEGG_df <- list()
@@ -874,7 +874,7 @@ for (i in 1:length(gse_KEGG)) {
   gse_KEGG_sig[[names(gse_KEGG)[i]]] <- gse_KEGG_df[[i]] %>% filter(p.adjust<0.1)
 }
 
-openxlsx::write.xlsx(gse_KEGG, file = "/Users/tili/Desktop/Cell_line_bulk_seq_202011/results/tables/DESeq2_x868_removed_gse_KEGG.xlsx")
+openxlsx::write.xlsx(gse_KEGG, file = "/Users/tili/Desktop/Cell_line_bulk_seq_202011/results/tables/DESeq2_patient3_removed_gse_KEGG.xlsx")
 
 ```
 

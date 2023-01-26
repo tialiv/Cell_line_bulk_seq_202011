@@ -40,13 +40,13 @@ theme <- theme(text=element_text(size=9),
                panel.background = element_blank()
 )
 
-new <- read_excel_allsheets("/Users/tili/Desktop/Cell_line_bulk_seq_202011/results/tables/not_stratified_DESeq2_x868_removed_sig01_20220110.xlsx")
+new <- read_excel_allsheets("/Users/tili/Desktop/Cell_line_bulk_seq_202011/results/tables/not_stratified_DESeq2_patient3_removed_sig01_20220110.xlsx")
 
-old <- read_excel_allsheets("/Users/tili/Desktop/Cell_line_bulk_seq_202011/results/tables/old analysis/DESeq2_x868_KTZ5_removed_20210805.xlsx")
+old <- read_excel_allsheets("/Users/tili/Desktop/Cell_line_bulk_seq_202011/results/tables/old analysis/DESeq2_patient3_KTZ5_removed_20210805.xlsx")
 
 old_no <- old[1:12]
 
-new_con <- read_excel_allsheets("/Users/tili/Desktop/Cell_line_bulk_seq_202011/results/tables/not_stratified_DESeq2_x868_removed_control_vs_exposed_sig01_20220110.xlsx")
+new_con <- read_excel_allsheets("/Users/tili/Desktop/Cell_line_bulk_seq_202011/results/tables/not_stratified_DESeq2_patient3_removed_control_vs_exposed_sig01_20220110.xlsx")
 
 MEHP <- read_excel_allsheets("/Users/tili/Desktop/Cell_line_bulk_seq_202011/results/tables/summary_DEG_voom single differential.xlsx")
 
@@ -157,7 +157,7 @@ intersect(new_all$external_gene_name, MEHP_all$symbol)
 
 ```{r enriched gene sets}
 
-enriched <- read_excel_allsheets("/Users/tili/Desktop/Cell_line_bulk_seq_202011/results/tables/DESeq2_x868_removed_gsea_hallmark_relevant only_20220111.xlsx")
+enriched <- read_excel_allsheets("/Users/tili/Desktop/Cell_line_bulk_seq_202011/results/tables/DESeq2_patient3_removed_gsea_hallmark_relevant only_20220111.xlsx")
 
 # Get individual genes from enriched gene sets and assign the group and hallmark id
 genes <- data.frame()
@@ -183,7 +183,7 @@ for (i in 1:length(new)) {
     print(intersect(tmp$gene, tmp1$external_gene_name))
 }
 
-openxlsx::write.xlsx(genes, "/Users/tili/Desktop/Cell_line_bulk_seq_202011/results/tables/DESeq2_x868_removed_gsea_hallmark_overlap_20220111.xlsx")
+openxlsx::write.xlsx(genes, "/Users/tili/Desktop/Cell_line_bulk_seq_202011/results/tables/DESeq2_patient3_removed_gsea_hallmark_overlap_20220111.xlsx")
 
 intersect(genes$gene, new_con_all$external_gene_name)
 
@@ -193,7 +193,7 @@ intersect(genes$gene, new_con_all$external_gene_name)
 
 ```{r individual gene plotting}
 
-plot_gene <- read_excel_allsheets("/Users/tili/Desktop/Cell_line_bulk_seq_202011/results/tables/DESeq2_x868_removed_gsea_hallmark_overlap_20220111.xlsx")
+plot_gene <- read_excel_allsheets("/Users/tili/Desktop/Cell_line_bulk_seq_202011/results/tables/DESeq2_patient3_removed_gsea_hallmark_overlap_20220111.xlsx")
 
 gene_list <- plot_gene[3:4]
 
@@ -286,7 +286,7 @@ des[["ASAH1"]] + des[["RHOA"]] + des[["SCD"]] + des[["MAPKAP1"]] +
 
 ```{r gsea limma result plotting}
 
-gse <- read_excel_allsheets("/Users/tili/Desktop/Cell_line_bulk_seq_202011/results/tables/DESeq2_x868_removed_gsea_hallmark_relevant only_20220111.xlsx")
+gse <- read_excel_allsheets("/Users/tili/Desktop/Cell_line_bulk_seq_202011/results/tables/DESeq2_patient3_removed_gsea_hallmark_relevant only_20220111.xlsx")
 
 gse_df <- data.frame()
 for (i in 1:length(gse)) {
