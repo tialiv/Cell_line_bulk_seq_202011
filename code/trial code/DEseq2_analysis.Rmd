@@ -430,7 +430,7 @@ all_shrunk <- lapply(shrunk, function(x) {
   x <- get_id(x)
 })
 
-openxlsx::write.xlsx(final, "/Users/tili/Desktop/Cell_line_bulk_seq_202011/results/tables/salmon_DESeq2_x868_ktz5_removed_20210805.xlsx")
+openxlsx::write.xlsx(final, "/Users/tili/Desktop/Cell_line_bulk_seq_202011/results/tables/salmon_DESeq2_patient3_ktz5_removed_20210805.xlsx")
 
 ```
 

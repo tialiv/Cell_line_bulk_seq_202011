@@ -79,7 +79,7 @@ gene <- cells[,1]
 rownames(cells) <- gene 
 cells <- cells[,-1] 
 
-outlier <- c("COV_P26_KTZ_9", "X868_KTZ_5")
+outlier <- c("COV_P26_KTZ_9", "patient3_KTZ_5")
 remove_id <- match(outlier, info$sample)
 info_outlier_removed <- info[-remove_id,]
 
